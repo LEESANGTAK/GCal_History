@@ -1,0 +1,30 @@
+/* 자동완성 박스 전체 스타일 */
+#gcal-history-suggestions {
+    position: absolute;
+    background: white;
+    border: 1px solid #dadce0;
+    border-radius: 0 0 8px 8px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    z-index: 9999;
+    max-height: 200px;
+    overflow-y: auto;
+    font-family: 'Google Sans', Roboto, Arial, sans-serif;
+}
+
+/* 개별 추천 아이템 스타일 */
+.suggestion-item {
+    padding: 10px 12px;
+    cursor: pointer;
+    font-size: 14px;
+    color: #3c4043;
+    border-bottom: 1px solid #f1f3f4;
+}
+
+/* 마우스 올렸을 때 색상 변경 */
+.suggestion-item:hover {
+    background-color: #f1f3f4;
+}
+
+.suggestion-item:last-child {
+    border-bottom: none;
+}
