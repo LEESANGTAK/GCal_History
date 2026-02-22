@@ -1,0 +1,25 @@
+# 구글 캘린더 일정 기반 자동완성 구현 태스크
+
+- [x] `manifest.json` 업데이트
+  - `identity` 권한 추가
+  - `oauth2` 관련 설정 (클라이언트 ID, 스코프) 추가
+  - `background.js` 서비스 워커 등록
+- [x] `background.js` 생성 및 연동
+  - `chrome.identity.getAuthToken`으로 OAuth 인증 로직 구현
+  - Google Calendar API (`/v3/calendars/primary/events`) 호출 로직 구현
+  - 가져온 실제 일정을 `content.js`로 전달하는 메시지 리스너 구현
+- [x] `content.js` 업데이트
+  - 로컬 스토리지에 이벤트 저장하던 기존 로직 제거
+  - `background.js`에 메시지를 보내 실제 캘린더 일정 목록 요청
+  - 받아온 데이터 기반으로 자동완성 필터링 되도록 기존 로직 수정
+- [x] (사용자 조치) Google Cloud Console에서 OAuth 클라이언트 ID 발급 및 `manifest.json`에 기입
+- [x] 다중 캘린더 지원
+  - `background.js`에서 사용자 캘린더 목록을 먼저 불러오도록 수정
+  - 모든 캘린더에 대해 병렬적으로 이벤트를 가져오도록 API 호출 방식 변경
+- [x] 자동선택(Auto-Select) 기능 구현
+  - 기존 일정을 클릭했을 때 해당 일정의 대상 캘린더(기념일, Private 등)를 팝업 내 드롭다운에서 자동으로 선택
+  - DOM 탐색 로직(오탐지 방지 및 합성 이벤트 Mousedown/Mouseup/Click 발동) 고도화 완료
+- [x] UI 즉각 업데이트 수정
+  - 자동완성 적용 후 React 렌더링 사이클이 텍스트 변경을 인지하지 못하는 현상 해결 (Focus, Input, Change, Keydown, Blur 이벤트 연쇄 트리거 적용)
+- [x] 불필요한 UI 삭제
+  - API 연동으로 개별 항목 삭제가 불필요해짐에 따라 자동완성 목록 우측의 'X' 삭제 버튼 제거
