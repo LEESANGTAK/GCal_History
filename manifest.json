@@ -3,6 +3,9 @@
   "name": "구글 캘린더 제목 자동완성 (G-Cal History)",
   "version": "2.0",
   "description": "이전에 입력했던 일정 제목을 기억하여 자동으로 추천해줍니다.",
+  "icons": {
+    "128": "icon128.png"
+  },
   "permissions": [
     "storage",
     "identity"
