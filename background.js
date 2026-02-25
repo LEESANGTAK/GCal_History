@@ -146,6 +146,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             sendResponse({ success: false, error: error.toString() });
         });
         return true;
+    } else if (request.action === 'silentRefresh') {
+        fetchCalendarEvents(false).then(items => {
+            sendResponse({ success: true, items: items });
+        }).catch(error => {
+            sendResponse({ success: false, error: error.toString() });
+        });
+        return true;
     }
 });
 

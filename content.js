@@ -5,23 +5,35 @@ let historyData = {
 
 // 백그라운드 스크립트에서 자동완성할 일정 데이터 가져오기
 function loadCalendarEvents() {
-    chrome.runtime.sendMessage({ action: 'getEvents' }, function (response) {
-        if (chrome.runtime.lastError) {
-            console.error("Error communicating with background script:", chrome.runtime.lastError.message);
-            return;
-        }
+    return new Promise((resolve) => {
+        chrome.runtime.sendMessage({ action: 'getEvents' }, function (response) {
+            if (chrome.runtime.lastError) {
+                console.error("Error communicating with background script:", chrome.runtime.lastError.message);
+                resolve(false);
+                return;
+            }
 
-        if (response && response.success && response.items) {
-            console.log("Successfully loaded calendar events:", response.items.length);
-            historyData.items = response.items;
-        } else {
-            console.error("Failed to load events:", response?.error || "Unknown error");
-        }
+            if (response && response.success && response.items) {
+                console.log("Successfully loaded calendar events:", response.items.length);
+                historyData.items = response.items;
+                resolve(true);
+            } else {
+                console.error("Failed to load events:", response?.error || "Unknown error");
+                resolve(false);
+            }
+        });
     });
 }
 
 // 초기 데이터 로딩
 loadCalendarEvents();
+
+chrome.storage.onChanged.addListener((changes, namespace) => {
+    if (namespace === 'local' && changes.cachedEvents && changes.cachedEvents.newValue) {
+        console.log("Updated events from storage change:", changes.cachedEvents.newValue.length);
+        historyData.items = changes.cachedEvents.newValue;
+    }
+});
 
 // 자동완성 목록 UI 생성
 const suggestionBox = document.createElement('div');
@@ -46,11 +58,37 @@ const observer = new MutationObserver((mutations) => {
     if (inputs.location && !inputs.location.dataset.acType) attachAutocomplete(inputs.location, 'locations');
     if (inputs.desc && !inputs.desc.dataset.acType) attachAutocomplete(inputs.desc, 'descriptions');
 
-    const buttons = document.querySelectorAll('button');
+    // Capture all possible save buttons (button tags and role="button" divs)
+    const buttons = document.querySelectorAll('button, div[role="button"], span[role="button"]');
     buttons.forEach(btn => {
-        if ((btn.innerText === '저장' || btn.innerText === 'Save') && !btn.dataset.saveListener) {
+        const text = btn.innerText || btn.textContent || '';
+        if ((text.trim() === '저장' || text.trim() === 'Save') && !btn.dataset.saveListener) {
             btn.dataset.saveListener = "true";
-            // Removed saveAllFields listener as we no longer save history locally
+
+            // Capture the elements *now* while we know they exist, but get values on mousedown/click
+            btn.addEventListener('mousedown', () => {
+                const inputs = getInputs();
+                const newTitle = inputs.title ? getVal(inputs.title) : "";
+                if (newTitle && newTitle.trim() !== "") {
+                    // Optimistic update
+                    historyData.items.unshift({
+                        title: newTitle.trim(),
+                        location: inputs.location ? getVal(inputs.location).trim() : "",
+                        description: inputs.desc ? getVal(inputs.desc).trim() : "",
+                        calendarSummary: "",
+                        calendarId: "",
+                        startTime: "",
+                        endTime: "",
+                        isAllDay: false
+                    });
+                }
+            }, { capture: true }); // Use capture phase to ensure we hit it before SPA navigates away
+
+            btn.addEventListener('click', () => {
+                setTimeout(() => {
+                    chrome.runtime.sendMessage({ action: 'silentRefresh' });
+                }, 1500);
+            }, { capture: true });
         }
     });
 });
@@ -160,8 +198,18 @@ function attachAutocomplete(element, type) {
     const eventType = (element.tagName === 'DIV') ? 'input' : 'input';
     let selectedIndex = -1;
 
+    element.addEventListener('focus', () => {
+        // 언제든 입력창을 포커스할 때 백그라운드의 최신 캐시를 불러옵니다 (SPA 환경 대비)
+        loadCalendarEvents();
+    });
+
     element.addEventListener(eventType, (e) => {
         if (e.isTrusted) {
+            // Google Calendar is an SPA, if the memory was somehow wiped or empty, try re-fetching
+            if (historyData.items.length === 0) {
+                loadCalendarEvents();
+            }
+
             const val = getVal(element);
 
             if (!val || val.trim() === "") {
@@ -263,12 +311,17 @@ function setVal(el, text) {
         el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Process', bubbles: true }));
         el.dispatchEvent(new KeyboardEvent('keyup', { key: 'Process', bubbles: true }));
 
-        // 요소에서 포커스를 빼서 변경 사항 확정
-        el.blur();
+        // DO NOT blur the element here so the user can continue typing.
+        // Instead, move cursor to the end of the input
+        try {
+            el.selectionStart = el.value.length;
+            el.selectionEnd = el.value.length;
+        } catch (e) { }
+
     } else {
         el.innerText = text;
         el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-        el.blur();
+        // DO NOT blur DIV elements either
     }
 }
 
@@ -280,6 +333,20 @@ function showSuggestions(matches, inputElement, type) {
     suggestionBox.style.top = (rect.bottom + window.scrollY) + 'px';
     suggestionBox.style.width = Math.max(rect.width, 350) + 'px';
     suggestionBox.style.display = 'block';
+
+    // HTML Escape Helper
+    function escapeHTML(str) {
+        if (!str) return '';
+        return str.replace(/[&<>'"]/g,
+            tag => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                "'": '&#39;',
+                '"': '&quot;'
+            }[tag] || tag)
+        );
+    }
 
     const limitMatches = matches.slice(0, 5);
 
@@ -299,13 +366,13 @@ function showSuggestions(matches, inputElement, type) {
 
         let displayText = '';
         if (type === 'titles') {
-            displayText = `<strong>${match.title}</strong>`;
+            displayText = `<strong>${escapeHTML(match.title)}</strong>`;
             if (match.location) {
-                displayText += ` <span style="color:#70757a; font-size:0.9em;">📍 ${match.location}</span>`;
+                displayText += ` <span style="color:#70757a; font-size:0.9em;">📍 ${escapeHTML(match.location)}</span>`;
             }
         } else {
             const icon = type === 'locations' ? '📍 ' : '📝 ';
-            displayText = icon + match;
+            displayText = icon + escapeHTML(match);
         }
 
         textSpan.innerHTML = displayText;
@@ -321,12 +388,17 @@ function showSuggestions(matches, inputElement, type) {
 
                 if (match.location && inputs.location) setVal(inputs.location, match.location);
                 if (match.description && inputs.desc) setVal(inputs.desc, match.description);
-                setVal(inputElement, match.title);
 
-                // 선택한 일정명에 맞게 캘린더와 시간을 세팅
-                setCalendarAndTimes(match);
+                // 선택한 일정명에 맞게 캘린더와 시간을 세팅 (이 과정에서 포커스가 뺏길 수 있음)
+                setCalendarAndTimes(match).then(() => {
+                    // Set the title last, and explicitly focus it
+                    setVal(inputElement, match.title);
+                    inputElement.focus();
+                });
+
             } else {
                 setVal(inputElement, match);
+                inputElement.focus();
             }
 
             closeSuggestions();
