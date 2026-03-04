@@ -39,6 +39,12 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
 const suggestionBox = document.createElement('div');
 suggestionBox.id = 'gcal-history-suggestions';
 suggestionBox.style.display = 'none';
+suggestionBox.style.maxHeight = '220px'; // 약 5개 항목 높이
+suggestionBox.style.overflowY = 'auto';
+suggestionBox.style.backgroundColor = '#fff';
+suggestionBox.style.borderRadius = '4px';
+suggestionBox.style.boxShadow = '0 4px 6px rgba(32,33,36,.28)';
+suggestionBox.style.zIndex = '9999';
 document.body.appendChild(suggestionBox);
 
 // 입력창 찾기 헬퍼 함수
@@ -279,7 +285,12 @@ function attachAutocomplete(element, type) {
 
 function highlightItem(items, index) {
     items.forEach((item, i) => {
-        item.style.backgroundColor = (i === index) ? '#e8eaed' : '';
+        const isSelected = (i === index);
+        item.style.backgroundColor = isSelected ? '#e8eaed' : '';
+        if (isSelected) {
+            // 선택된 항목이 스크롤 영역 밖이면 자동으로 스크롤
+            item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
     });
 }
 
@@ -348,7 +359,7 @@ function showSuggestions(matches, inputElement, type) {
         );
     }
 
-    const limitMatches = matches.slice(0, 5);
+    const limitMatches = matches.slice(0, 20); // 상위 20개까지 데이터 제공 (스크롤 가능)
 
     limitMatches.forEach(match => {
         const div = document.createElement('div');
@@ -357,6 +368,10 @@ function showSuggestions(matches, inputElement, type) {
         div.style.display = 'flex';
         div.style.justifyContent = 'space-between';
         div.style.alignItems = 'center';
+        div.style.padding = '10px 12px';
+        div.style.cursor = 'pointer';
+        div.style.borderBottom = '1px solid #f1f3f4';
+        div.style.fontSize = '14px';
 
         const textSpan = document.createElement('span');
         textSpan.style.flex = '1';
