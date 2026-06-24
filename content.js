@@ -76,8 +76,7 @@ const observer = new MutationObserver((mutations) => {
                 const inputs = getInputs();
                 const newTitle = inputs.title ? getVal(inputs.title) : "";
                 if (newTitle && newTitle.trim() !== "") {
-                    // Optimistic update
-                    historyData.items.unshift({
+                    const newItem = {
                         title: newTitle.trim(),
                         location: inputs.location ? getVal(inputs.location).trim() : "",
                         description: inputs.desc ? getVal(inputs.desc).trim() : "",
@@ -86,6 +85,18 @@ const observer = new MutationObserver((mutations) => {
                         startTime: "",
                         endTime: "",
                         isAllDay: false
+                    };
+
+                    // Optimistic update: 메모리에 즉시 반영
+                    historyData.items.unshift(newItem);
+
+                    // chrome.storage에도 즉시 반영 → storage.onChanged 리스너를 통해 자동완성에 바로 등장
+                    chrome.storage.local.get(['cachedEvents'], (result) => {
+                        const current = result.cachedEvents || [];
+                        // 중복 제거 (같은 제목+위치 조합이 이미 있으면 앞으로 이동)
+                        const key = `${newItem.title}|${newItem.location}`;
+                        const filtered = current.filter(item => `${item.title}|${item.location}` !== key);
+                        chrome.storage.local.set({ cachedEvents: [newItem, ...filtered] });
                     });
                 }
             }, { capture: true }); // Use capture phase to ensure we hit it before SPA navigates away
