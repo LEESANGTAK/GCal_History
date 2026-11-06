@@ -93,19 +93,28 @@ suggestionBox.style.boxShadow = '0 4px 6px rgba(32,33,36,.28)';
 suggestionBox.style.zIndex = '9999';
 document.body.appendChild(suggestionBox);
 
+// 지원 언어 감지 (한국어, 일본어, 중국어, 그 외는 영어 기본)
+function getAppLanguage() {
+    const lang = (navigator.language || '').toLowerCase();
+    if (lang.startsWith('ko')) return 'ko';
+    if (lang.startsWith('ja')) return 'ja';
+    if (lang.startsWith('zh')) return 'zh';
+    return 'en';
+}
+
 // 현재 활성화된 모달 다이얼로그 또는 뷰 탐색 (가장 최근 열린 모달 우선)
 function getActiveDialog() {
     const dialogs = Array.from(document.querySelectorAll('[role="dialog"], [data-is-view="true"]'));
-    return dialogs.find(d => d.querySelector('input[aria-label="제목 추가"], input[aria-label="Add title"], input[aria-label="제목 및 시간 추가"]')) || document;
+    return dialogs.find(d => d.querySelector('input[aria-label*="제목"], input[aria-label*="Title"], input[aria-label*="タイトル"], input[aria-label*="标题"]')) || document;
 }
 
 // 입력창 찾기 헬퍼 함수 (모달 범위 우선 탐색으로 성능 최적화)
 function getInputs() {
     const scope = getActiveDialog() || document;
     return {
-        title: scope.querySelector('input[aria-label="제목 추가"], input[aria-label="Add title"], input[aria-label="제목 및 시간 추가"]'),
-        location: scope.querySelector('input[aria-label="위치 추가"], input[aria-label="Add location"]'),
-        desc: findDescriptionEditable(scope) || scope.querySelector('div[aria-label*="설명"], div[aria-label*="description" i]')
+        title: scope.querySelector('input[aria-label*="제목"], input[aria-label*="Title"], input[aria-label*="タイトル"], input[aria-label*="标题"]'),
+        location: scope.querySelector('input[aria-label*="위치"], input[aria-label*="Location"], input[aria-label*="場所"], input[aria-label*="位置"]'),
+        desc: findDescriptionEditable(scope) || scope.querySelector('div[aria-label*="설명"], div[aria-label*="Description" i], div[aria-label*="説明"], div[aria-label*="说明"]')
     };
 }
 
@@ -132,7 +141,23 @@ function formatTime(hours, minutes, templateValue = '') {
         return `${period} ${h}:${minStr}`;
     }
 
-    // 2. 기존 값에 AM/PM이 포함된 경우 (영어 12시간제)
+    // 2. 일본어 12시간제 (午前 / 午後)
+    if (templateValue && (templateValue.includes('午前') || templateValue.includes('午後'))) {
+        const period = hours < 12 ? '午前' : '午後';
+        let h = hours % 12;
+        if (h === 0) h = 12;
+        return `${period} ${h}:${minStr}`;
+    }
+
+    // 3. 중국어 12시간제 (上午 / 下午)
+    if (templateValue && (templateValue.includes('上午') || templateValue.includes('下午'))) {
+        const period = hours < 12 ? '上午' : '下午';
+        let h = hours % 12;
+        if (h === 0) h = 12;
+        return `${period} ${h}:${minStr}`;
+    }
+
+    // 4. 기존 값에 AM/PM이 포함된 경우 (영어 12시간제)
     if (templateValue && /[ap]m/i.test(templateValue)) {
         const isUpper = /[AP]M/.test(templateValue);
         const period = hours < 12 ? (isUpper ? 'AM' : 'am') : (isUpper ? 'PM' : 'pm');
@@ -142,17 +167,26 @@ function formatTime(hours, minutes, templateValue = '') {
         return `${h}:${minStr}${space}${period}`;
     }
 
-    // 3. 기존 값에 24시간제(콜론만 있음) 형식이 쓰인 경우
+    // 5. 기존 값에 24시간제(콜론만 있음) 형식이 쓰인 경우
     if (templateValue && /\b[0-2]?[0-9]:[0-5][0-9]\b/.test(templateValue)) {
         return `${String(hours).padStart(2, '0')}:${minStr}`;
     }
 
-    // 4. 기본 포맷팅 (로케일 및 페이지 언어 감지)
-    const isKorean = (navigator.language && navigator.language.startsWith('ko')) ||
-        !!document.querySelector('[aria-label*="시작 시간"], [aria-label*="저장"], [aria-label*="제목 추가"]');
+    // 6. 기본 포맷팅 (로케일 및 페이지 언어 감지)
+    const appLang = getAppLanguage();
 
-    if (isKorean) {
+    if (appLang === 'ko') {
         const period = hours < 12 ? '오전' : '오후';
+        let h = hours % 12;
+        if (h === 0) h = 12;
+        return `${period} ${h}:${minStr}`;
+    } else if (appLang === 'ja') {
+        const period = hours < 12 ? '午前' : '午後';
+        let h = hours % 12;
+        if (h === 0) h = 12;
+        return `${period} ${h}:${minStr}`;
+    } else if (appLang === 'zh') {
+        const period = hours < 12 ? '上午' : '下午';
         let h = hours % 12;
         if (h === 0) h = 12;
         return `${period} ${h}:${minStr}`;
@@ -166,13 +200,13 @@ function formatTime(hours, minutes, templateValue = '') {
 
 // "종일" 체크박스 요소 탐색
 function getAllDayCheckbox(scope) {
-    let cb = scope.querySelector('input[type="checkbox"][aria-label*="종일"], input[type="checkbox"][aria-label*="All day"], [role="checkbox"][aria-label*="종일"], [role="checkbox"][aria-label*="All day"]');
+    let cb = scope.querySelector('input[type="checkbox"][aria-label*="종일"], input[type="checkbox"][aria-label*="All day"], input[type="checkbox"][aria-label*="終日"], input[type="checkbox"][aria-label*="全天"], [role="checkbox"][aria-label*="종일"], [role="checkbox"][aria-label*="All day"], [role="checkbox"][aria-label*="終日"], [role="checkbox"][aria-label*="全天"]');
     if (cb) return cb;
 
     const candidates = Array.from(scope.querySelectorAll('label, div, span'));
     for (const el of candidates) {
         const text = (el.innerText || el.textContent || '').trim();
-        if (text === '종일' || text === 'All day') {
+        if (text === '종일' || text === 'All day' || text === '終日' || text === '全天') {
             cb = el.querySelector('input[type="checkbox"], [role="checkbox"]')
                 || el.closest('label')?.querySelector('input[type="checkbox"], [role="checkbox"]')
                 || el.parentElement?.querySelector('input[type="checkbox"], [role="checkbox"]');
@@ -197,22 +231,23 @@ function getAddTimeButton(scope) {
     return btns.find(b => {
         const text = (b.innerText || b.textContent || '').trim();
         const label = b.getAttribute('aria-label') || '';
-        return text === '시간 추가' || text === 'Add time' || label.includes('시간 추가') || label.includes('Add time');
+        return text === '시간 추가' || text === 'Add time' || text === '時間を追加' || text === '添加时间' ||
+            label.includes('시간 추가') || label.includes('Add time') || label.includes('時間を追加') || label.includes('添加时间');
     });
 }
 
 // 시작 시간 및 종료 시간 input 탐색
 function getTimeInputs(scope) {
-    let startInput = scope.querySelector('input[aria-label*="시작 시간"], input[aria-label*="Start time"]');
-    let endInput = scope.querySelector('input[aria-label*="종료 시간"], input[aria-label*="End time"]');
+    let startInput = scope.querySelector('input[aria-label*="시작 시간"], input[aria-label*="Start time"], input[aria-label*="開始時間"], input[aria-label*="开始时间"]');
+    let endInput = scope.querySelector('input[aria-label*="종료 시간"], input[aria-label*="End time"], input[aria-label*="終了時間"], input[aria-label*="结束时间"]');
 
     if (!startInput || !endInput) {
-        const timeRegex = /(오전|오후|\bAM\b|\bPM\b|\b[0-2]?[0-9]:[0-5][0-9])/i;
+        const timeRegex = /(오전|오후|\bAM\b|\bPM\b|午前|午後|上午|下午|\b[0-2]?[0-9]:[0-5][0-9])/i;
         const allInputs = Array.from(scope.querySelectorAll('input:not([type="hidden"]):not([type="checkbox"])'));
         const matched = allInputs.filter(inp => {
             const val = inp.value || '';
             const aria = inp.getAttribute('aria-label') || '';
-            return timeRegex.test(val) || aria.includes('시간') || aria.toLowerCase().includes('time');
+            return timeRegex.test(val) || aria.includes('시간') || aria.toLowerCase().includes('time') || aria.includes('時間') || aria.includes('时间');
         });
 
         if (matched.length >= 2) {
@@ -228,8 +263,8 @@ function getTimeInputs(scope) {
 
 // 시작 날짜 및 종료 날짜 input 정밀 탐색
 function getDateInputs(scope) {
-    let startInput = scope.querySelector('input[aria-label*="시작 날짜"], input[aria-label*="Start date"], input[aria-label*="시작일"]');
-    let endInput = scope.querySelector('input[aria-label*="종료 날짜"], input[aria-label*="End date"], input[aria-label*="종료일"]');
+    let startInput = scope.querySelector('input[aria-label*="시작 날짜"], input[aria-label*="Start date"], input[aria-label*="시작일"], input[aria-label*="開始日"], input[aria-label*="开始日期"]');
+    let endInput = scope.querySelector('input[aria-label*="종료 날짜"], input[aria-label*="End date"], input[aria-label*="종료일"], input[aria-label*="終了日"], input[aria-label*="结束日期"]');
 
     if (startInput && endInput) {
         return { startInput, endInput };
@@ -243,16 +278,16 @@ function getDateInputs(scope) {
         const val = inp.value || '';
 
         // 제목 및 위치 필드 제외
-        if (aria.includes('제목') || aria.toLowerCase().includes('title') || placeholder.includes('제목')) return false;
-        if (aria.includes('위치') || aria.toLowerCase().includes('location') || placeholder.includes('위치')) return false;
+        if (aria.includes('제목') || aria.toLowerCase().includes('title') || aria.includes('タイトル') || aria.includes('标题') || placeholder.includes('제목')) return false;
+        if (aria.includes('위치') || aria.toLowerCase().includes('location') || aria.includes('場所') || aria.includes('位置') || placeholder.includes('위치')) return false;
 
-        // 시간 필드 제외 (오전/오후, AM/PM, HH:MM 패턴 또는 aria에 '시간' 포함)
-        const timeRegex = /(오전|오후|\bAM\b|\bPM\b|\b[0-2]?[0-9]:[0-5][0-9])/i;
-        if (timeRegex.test(val) || aria.includes('시간') || aria.toLowerCase().includes('time')) return false;
+        // 시간 필드 제외
+        const timeRegex = /(오전|오후|\bAM\b|\bPM\b|午前|午後|上午|下午|\b[0-2]?[0-9]:[0-5][0-9])/i;
+        if (timeRegex.test(val) || aria.includes('시간') || aria.toLowerCase().includes('time') || aria.includes('時間') || aria.includes('时间')) return false;
 
-        // 날짜 패턴(연도가 있거나 없거나: 11월 10일, 11. 10., 2026. 11. 10., 11/10 등) 또는 aria에 날짜 포함
-        const dateRegex = /(\d{1,2}[월\.]\s*\d{1,2}|\d{4}[^\d]+\d{1,2}|\d{1,2}\/\d{1,2})/;
-        return aria.includes('날짜') || aria.toLowerCase().includes('date') || dateRegex.test(val) || dateRegex.test(aria);
+        // 날짜 패턴(연도가 있거나 없거나: 11월 10일, 11月10日, 11. 10., 2026. 11. 10., 11/10 등) 또는 aria에 날짜 포함
+        const dateRegex = /(\d{1,2}[월月\.]\s*\d{1,2}|\d{4}[^\d]+\d{1,2}|\d{1,2}\/\d{1,2})/;
+        return aria.includes('날짜') || aria.toLowerCase().includes('date') || aria.includes('日') || aria.includes('期') || dateRegex.test(val) || dateRegex.test(aria);
     });
 
     if (candidateInputs.length >= 2) {
@@ -283,8 +318,8 @@ function parseDateString(dateStr) {
         return new Date(parseInt(m[3], 10), parseInt(m[1], 10) - 1, parseInt(m[2], 10));
     }
 
-    // 3. 연도가 생략된 한국어: "11월 10일", "11월 10일 (화)", "11. 10." 등
-    m = cleanStr.match(/(\d{1,2})[월\.]\s*(\d{1,2})/);
+    // 3. 연도가 생략된 한국어/일본어/중국어: "11월 10일", "11月10日", "11월 10일 (화)", "11. 10." 등
+    m = cleanStr.match(/(\d{1,2})[월月\.]\s*(\d{1,2})/);
     if (m) {
         return new Date(currentYear, parseInt(m[1], 10) - 1, parseInt(m[2], 10));
     }
@@ -320,8 +355,14 @@ function formatDate(targetDate, templateValue = '') {
         if (/\d{4}년\s*\d{1,2}월\s*\d{1,2}일/.test(templateValue)) {
             return `${y}년 ${m}월 ${d}일`;
         }
+        if (/\d{4}年\s*\d{1,2}月\s*\d{1,2}日/.test(templateValue)) {
+            return `${y}年${m}月${d}日`;
+        }
         if (/\d{1,2}월\s*\d{1,2}일/.test(templateValue)) {
             return `${m}월 ${d}일`;
+        }
+        if (/\d{1,2}月\s*\d{1,2}日/.test(templateValue)) {
+            return `${m}月${d}日`;
         }
         if (/^\d{1,2}\.\s*\d{1,2}\./.test(templateValue)) {
             return `${m}. ${d}.`;
@@ -533,20 +574,21 @@ async function applyEventTimes(activeDialog, match) {
 async function applyLocation(scope, locationText) {
     if (!locationText || !locationText.trim()) return;
 
-    let locInput = scope.querySelector('input[aria-label="위치 추가"], input[aria-label="Add location"], input[placeholder*="위치 추가"], input[placeholder*="Add location"]');
+    let locInput = scope.querySelector('input[aria-label*="위치"], input[aria-label*="Location"], input[aria-label*="場所"], input[aria-label*="位置"], input[placeholder*="위치"], input[placeholder*="Location"], input[placeholder*="場所"], input[placeholder*="位置"]');
 
     if (!locInput) {
         const btns = Array.from(scope.querySelectorAll('button, div[role="button"], span[role="button"]'));
         const locBtn = btns.find(b => {
-            const label = b.getAttribute('aria-label') || '';
-            const text = (b.innerText || b.textContent || '').trim();
-            return label.includes('위치') || label.toLowerCase().includes('location') || text === '위치 추가' || text === 'Add location';
+            const label = (b.getAttribute('aria-label') || '').toLowerCase();
+            const text = (b.innerText || b.textContent || '').trim().toLowerCase();
+            return label.includes('위치') || label.includes('location') || label.includes('場所') || label.includes('位置') ||
+                text.includes('위치') || text.includes('location') || text.includes('場所') || text.includes('位置');
         });
 
         if (locBtn) {
             locBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
             await new Promise(r => setTimeout(r, 200));
-            locInput = scope.querySelector('input[aria-label="위치 추가"], input[aria-label="Add location"], input[placeholder*="위치 추가"], input[placeholder*="Add location"]');
+            locInput = scope.querySelector('input[aria-label*="위치"], input[aria-label*="Location"], input[aria-label*="場所"], input[aria-label*="位置"], input[placeholder*="위치"], input[placeholder*="Location"], input[placeholder*="場所"], input[placeholder*="位置"]');
         }
     }
 
@@ -578,9 +620,12 @@ function findDescriptionEditable(scope) {
             const aria = (el.getAttribute('aria-label') || '').toLowerCase();
             const placeholder = (el.getAttribute('data-placeholder') || '').toLowerCase();
             // 제목, 위치, 참석자 인풋 제외
-            if (aria.includes('제목') || aria.includes('title') || aria.includes('위치') || aria.includes('location')) continue;
-            if (aria.includes('설명') || aria.includes('description') || aria.includes('첨부') || aria.includes('attachment') ||
-                placeholder.includes('설명') || placeholder.includes('description') || el.getAttribute('role') === 'textbox') {
+            if (aria.includes('제목') || aria.includes('title') || aria.includes('タイトル') || aria.includes('标题') ||
+                aria.includes('위치') || aria.includes('location') || aria.includes('場所') || aria.includes('位置')) continue;
+            if (aria.includes('설명') || aria.includes('description') || aria.includes('説明') || aria.includes('说明') ||
+                aria.includes('첨부') || aria.includes('attachment') || aria.includes('添付') || aria.includes('附件') ||
+                placeholder.includes('설명') || placeholder.includes('description') || placeholder.includes('説明') || placeholder.includes('说明') ||
+                el.getAttribute('role') === 'textbox') {
                 return el;
             }
         }
@@ -594,7 +639,8 @@ function findDescriptionEditable(scope) {
         for (const ta of textareas) {
             const aria = (ta.getAttribute('aria-label') || '').toLowerCase();
             const placeholder = (ta.getAttribute('placeholder') || '').toLowerCase();
-            if (aria.includes('설명') || aria.includes('description') || placeholder.includes('설명') || placeholder.includes('description')) {
+            if (aria.includes('설명') || aria.includes('description') || aria.includes('説明') || aria.includes('说明') ||
+                placeholder.includes('설명') || placeholder.includes('description') || placeholder.includes('説明') || placeholder.includes('说明')) {
                 return ta;
             }
         }
@@ -614,11 +660,12 @@ function findDescriptionButton(scope) {
             const label = (b.getAttribute('aria-label') || '').toLowerCase();
             const text = (b.innerText || b.textContent || '').trim().toLowerCase();
 
-            // "설명 또는 첨부파일 추가", "설명 추가", "Add description", "Add description or attachments"
-            if (label.includes('설명') || label.includes('description') ||
-                text.includes('설명') || text.includes('description') ||
+            // 한국어, 영어, 일본어, 중국어 지원
+            if (label.includes('설명') || label.includes('description') || label.includes('説明') || label.includes('说明') ||
+                text.includes('설명') || text.includes('description') || text.includes('説明') || text.includes('说明') ||
                 (text.includes('첨부파일') && !text.includes('google')) ||
-                (text.includes('attachment') && !text.includes('google'))) {
+                (text.includes('attachment') && !text.includes('google')) ||
+                text.includes('添付') || text.includes('附件')) {
                 return b;
             }
         }
@@ -731,14 +778,15 @@ async function applyDescription(scope, descText) {
 async function applyAttendees(scope, attendees) {
     if (!Array.isArray(attendees) || attendees.length === 0) return;
 
-    let guestInput = scope.querySelector('input[placeholder*="참석자 추가"], input[placeholder*="Add guests"], input[aria-label*="참석자 추가"], input[aria-label*="Add guests"]');
+    let guestInput = scope.querySelector('input[placeholder*="참석자"], input[placeholder*="guests" i], input[placeholder*="ゲスト"], input[placeholder*="参与"], input[aria-label*="참석자"], input[aria-label*="guests" i], input[aria-label*="ゲスト"], input[aria-label*="参与"]');
 
     if (!guestInput) {
         const guestBtns = Array.from(scope.querySelectorAll('button, div[role="button"], span[role="button"]'));
         const guestBtn = guestBtns.find(b => {
-            const label = b.getAttribute('aria-label') || '';
-            const text = (b.innerText || b.textContent || '').trim();
-            return label.includes('참석자') || label.toLowerCase().includes('guests') || text === '참석자 추가' || text === 'Add guests';
+            const label = (b.getAttribute('aria-label') || '').toLowerCase();
+            const text = (b.innerText || b.textContent || '').trim().toLowerCase();
+            return label.includes('참석자') || label.includes('guests') || label.includes('ゲスト') || label.includes('参与') ||
+                text.includes('참석자') || text.includes('guests') || text.includes('ゲスト') || text.includes('参与');
         });
 
         if (guestBtn) {
@@ -748,7 +796,7 @@ async function applyAttendees(scope, attendees) {
             guestBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
             await new Promise(r => setTimeout(r, 200));
 
-            guestInput = scope.querySelector('input[placeholder*="참석자 추가"], input[placeholder*="Add guests"], input[aria-label*="참석자 추가"], input[aria-label*="Add guests"]');
+            guestInput = scope.querySelector('input[placeholder*="참석자"], input[placeholder*="guests" i], input[placeholder*="ゲスト"], input[placeholder*="参与"], input[aria-label*="참석자"], input[aria-label*="guests" i], input[aria-label*="ゲスト"], input[aria-label*="参与"]');
         }
     }
 
@@ -785,14 +833,14 @@ async function applyAttendees(scope, attendees) {
 async function setCalendarSelection(activeDialog, calendarSummary) {
     if (!calendarSummary) return;
 
-    let targetBtn = activeDialog.querySelector('[aria-label="캘린더"][aria-haspopup="listbox"], [aria-label="Calendar"][aria-haspopup="listbox"], [data-is-calendar-selector="true"]');
+    let targetBtn = activeDialog.querySelector('[aria-label*="캘린더"][aria-haspopup="listbox"], [aria-label*="Calendar"][aria-haspopup="listbox"], [aria-label*="カレンダー"][aria-haspopup="listbox"], [aria-label*="日历"][aria-haspopup="listbox"], [data-is-calendar-selector="true"]');
 
     if (!targetBtn) {
         const allLists = Array.from(activeDialog.querySelectorAll('[aria-haspopup="listbox"], [role="combobox"]'));
         targetBtn = allLists.find(btn => {
             const text = btn.innerText || '';
             const label = btn.getAttribute('aria-label') || '';
-            if (label.includes('캘린더') || label.includes('Calendar')) return true;
+            if (label.includes('캘린더') || label.includes('Calendar') || label.includes('カレンダー') || label.includes('日历')) return true;
             const iconSvg = btn.querySelector('svg');
             if (iconSvg && btn.textContent) return true;
             return false;
@@ -947,7 +995,8 @@ function scanAndAttachListeners() {
 
             const label = btn.getAttribute('aria-label') || '';
             const text = btn.textContent || '';
-            const isSaveBtn = label === '저장' || label === 'Save' || text.trim() === '저장' || text.trim() === 'Save';
+            const isSaveBtn = label === '저장' || label === 'Save' || label === '保存' ||
+                text.trim() === '저장' || text.trim() === 'Save' || text.trim() === '保存';
 
             if (isSaveBtn) {
                 btn.dataset.saveListener = "true";
@@ -1159,8 +1208,7 @@ function showSuggestions(matches, inputElement, type) {
         textSpan.style.textOverflow = 'ellipsis';
         textSpan.style.whiteSpace = 'nowrap';
 
-        const isKoreanUI = (navigator.language && navigator.language.startsWith('ko')) ||
-            !!document.querySelector('[aria-label*="시작 시간"], [aria-label*="저장"], [aria-label*="제목 추가"]');
+        const appLang = getAppLanguage();
 
         let displayText = '';
         if (type === 'titles') {
@@ -1170,11 +1218,22 @@ function showSuggestions(matches, inputElement, type) {
             }
             if (match.isAllDay) {
                 const duration = getDurationDays(match);
+                let durLabel = `${duration} days (All day)`;
+                let allDayLabel = 'All day';
+                if (appLang === 'ko') {
+                    durLabel = `${duration}일간 (종일)`;
+                    allDayLabel = '종일';
+                } else if (appLang === 'ja') {
+                    durLabel = `${duration}日間 (終日)`;
+                    allDayLabel = '終日';
+                } else if (appLang === 'zh') {
+                    durLabel = `${duration}天 (全天)`;
+                    allDayLabel = '全天';
+                }
+
                 if (duration > 1) {
-                    const durLabel = isKoreanUI ? `${duration}일간 (종일)` : `${duration} days (All day)`;
                     displayText += ` <span style="color:#1a73e8; font-size:0.85em; margin-left:4px;">📅 ${durLabel}</span>`;
                 } else {
-                    const allDayLabel = isKoreanUI ? '종일' : 'All day';
                     displayText += ` <span style="color:#1a73e8; font-size:0.85em; margin-left:4px;">📅 ${allDayLabel}</span>`;
                 }
             } else if (match.startTime) {
@@ -1184,18 +1243,28 @@ function showSuggestions(matches, inputElement, type) {
                 if (sObj) {
                     const sStr = formatTime(sObj.hours, sObj.minutes);
                     const eStr = eObj ? ` ~ ${formatTime(eObj.hours, eObj.minutes)}` : '';
-                    const durLabel = duration > 0 ? (isKoreanUI ? ` (${duration + 1}일간)` : ` (${duration + 1} days)`) : '';
+                    let durLabel = '';
+                    if (duration > 0) {
+                        if (appLang === 'ko') durLabel = ` (${duration + 1}일간)`;
+                        else if (appLang === 'ja') durLabel = ` (${duration + 1}日間)`;
+                        else if (appLang === 'zh') durLabel = ` (${duration + 1}天)`;
+                        else durLabel = ` (${duration + 1} days)`;
+                    }
                     displayText += ` <span style="color:#1a73e8; font-size:0.85em; margin-left:4px;">⏰ ${sStr}${eStr}${durLabel}</span>`;
                 }
             }
             if (Array.isArray(match.attendees) && match.attendees.length > 0) {
-                const guestLabel = isKoreanUI 
-                    ? `${match.attendees.length}명` 
-                    : `${match.attendees.length} ${match.attendees.length === 1 ? 'guest' : 'guests'}`;
+                let guestLabel = `${match.attendees.length} ${match.attendees.length === 1 ? 'guest' : 'guests'}`;
+                if (appLang === 'ko') guestLabel = `${match.attendees.length}명`;
+                else if (appLang === 'ja') guestLabel = `${match.attendees.length}名`;
+                else if (appLang === 'zh') guestLabel = `${match.attendees.length}人`;
                 displayText += ` <span style="color:#5f6368; font-size:0.85em; margin-left:4px;">👥 ${guestLabel}</span>`;
             }
             if (match.description) {
-                const descLabel = isKoreanUI ? '설명' : 'Description';
+                let descLabel = 'Description';
+                if (appLang === 'ko') descLabel = '설명';
+                else if (appLang === 'ja') descLabel = '説明';
+                else if (appLang === 'zh') descLabel = '说明';
                 displayText += ` <span style="color:#5f6368; font-size:0.85em; margin-left:4px;" title="${escapeHTML(match.description.slice(0, 150))}">📝 ${descLabel}</span>`;
             }
         } else {
