@@ -670,13 +670,17 @@ async function applyDescription(scope, descText) {
         editField.focus();
         await new Promise(r => setTimeout(r, 60));
 
-        // Selection 및 Range 설정 (커서를 에디터 안으로)
+        // editField 내부만 타겟으로 Range 설정 및 기존 내용 비우기 (전체 화면 선택 번쩍임 현상 완전 제거)
+        let sel = window.getSelection();
         try {
-            const sel = window.getSelection();
-            const range = document.createRange();
-            range.selectNodeContents(editField);
-            sel.removeAllRanges();
-            sel.addRange(range);
+            if (sel) {
+                sel.removeAllRanges();
+                const range = document.createRange();
+                range.selectNodeContents(editField);
+                range.deleteContents(); // editField 내부만 깔끔하게 비움
+                range.collapse(false);  // 커서를 editField 내부 끝으로
+                sel.addRange(range);
+            }
         } catch (e) {
             console.warn("Failed to set selection range:", e);
         }
@@ -684,7 +688,6 @@ async function applyDescription(scope, descText) {
         // execCommand로 텍스트 삽입 (리액트가 가장 잘 인식하는 방식)
         let inserted = false;
         try {
-            document.execCommand('selectAll', false, null);
             inserted = document.execCommand('insertText', false, descText);
         } catch (e) {
             console.warn("execCommand error:", e);
@@ -709,7 +712,14 @@ async function applyDescription(scope, descText) {
         editField.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
         editField.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: 'Process' }));
 
-        await new Promise(r => setTimeout(r, 100));
+        // 선택 영역 정리 (파란색 하이라이트 잔여물 완전 제거)
+        try {
+            if (window.getSelection()) {
+                window.getSelection().removeAllRanges();
+            }
+        } catch (e) { }
+
+        await new Promise(r => setTimeout(r, 60));
         editField.blur();
         console.log("Description successfully applied!");
     } else {
