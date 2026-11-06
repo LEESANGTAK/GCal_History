@@ -4,6 +4,25 @@ const SCOPES = [
     'https://www.googleapis.com/auth/userinfo.email'
 ];
 
+// HTML 설명 텍스트를 줄바꿈을 살려 일반 텍스트로 정제
+function sanitizeDescription(raw) {
+    if (!raw || typeof raw !== 'string') return '';
+    return raw
+        .replace(/<br\s*[\/]?>/gi, '\n')
+        .replace(/<\/p>/gi, '\n')
+        .replace(/<\/div>/gi, '\n')
+        .replace(/<li[^>]*>/gi, '• ')
+        .replace(/<\/li>/gi, '\n')
+        .replace(/<([^>]+)>/gi, '')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/&quot;/gi, '"')
+        .replace(/&#39;/gi, "'")
+        .trim();
+}
+
 let currentFetchPromise = null;
 
 // 구글 캘린더에서 최근 일정을 가져옵니다. (모든 캘린더 대상)
@@ -184,7 +203,7 @@ async function fetchCalendarEvents(interactive = true) {
                     items.push({
                         title: title,
                         location: location,
-                        description: event.description ? event.description.replace(/(<([^>]+)>)/gi, "").trim() : '',
+                        description: sanitizeDescription(event.description),
                         attendees: attendees,
                         calendarSummary: event._calendarSummary || '',
                         calendarId: event._calendarId || '',

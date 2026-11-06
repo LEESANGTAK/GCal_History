@@ -105,7 +105,7 @@ function getInputs() {
     return {
         title: scope.querySelector('input[aria-label="제목 추가"], input[aria-label="Add title"], input[aria-label="제목 및 시간 추가"]'),
         location: scope.querySelector('input[aria-label="위치 추가"], input[aria-label="Add location"]'),
-        desc: scope.querySelector('div[aria-label="설명 추가"], div[aria-label="Add description"]')
+        desc: findDescriptionEditable(scope) || scope.querySelector('div[aria-label*="설명"], div[aria-label*="description" i]')
     };
 }
 
@@ -556,48 +556,164 @@ async function applyLocation(scope, locationText) {
     }
 }
 
+// 마우스/포인터 클릭 트리거 헬퍼 (구글 캘린더 커스텀 UI 버튼 완전 지원)
+function triggerClick(el) {
+    if (!el) return;
+    ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(evt => {
+        el.dispatchEvent(new MouseEvent(evt, { bubbles: true, cancelable: true, view: window }));
+    });
+    if (typeof el.click === 'function') {
+        try { el.click(); } catch (e) { }
+    }
+}
+
+// 설명 에디터(contenteditable 또는 textarea) 탐색
+function findDescriptionEditable(scope) {
+    const searchScopes = [scope, document].filter(Boolean);
+    for (const root of searchScopes) {
+        // 1. contenteditable 태그 우선 탐색
+        const editables = Array.from(root.querySelectorAll('[contenteditable="true"]'));
+        for (const el of editables) {
+            if (el.tagName === 'INPUT') continue;
+            const aria = (el.getAttribute('aria-label') || '').toLowerCase();
+            const placeholder = (el.getAttribute('data-placeholder') || '').toLowerCase();
+            // 제목, 위치, 참석자 인풋 제외
+            if (aria.includes('제목') || aria.includes('title') || aria.includes('위치') || aria.includes('location')) continue;
+            if (aria.includes('설명') || aria.includes('description') || aria.includes('첨부') || aria.includes('attachment') ||
+                placeholder.includes('설명') || placeholder.includes('description') || el.getAttribute('role') === 'textbox') {
+                return el;
+            }
+        }
+
+        // 2. 모달 내부에 존재하는 contenteditable div (구글 캘린더 빠른 추가 모달은 설명만 contenteditable div임)
+        const modalEdit = root.querySelector('[role="dialog"] div[contenteditable="true"], [data-is-view="true"] div[contenteditable="true"]');
+        if (modalEdit) return modalEdit;
+
+        // 3. textarea로 구현된 경우 탐색
+        const textareas = Array.from(root.querySelectorAll('textarea'));
+        for (const ta of textareas) {
+            const aria = (ta.getAttribute('aria-label') || '').toLowerCase();
+            const placeholder = (ta.getAttribute('placeholder') || '').toLowerCase();
+            if (aria.includes('설명') || aria.includes('description') || placeholder.includes('설명') || placeholder.includes('description')) {
+                return ta;
+            }
+        }
+    }
+    return null;
+}
+
+// "설명 추가" / "설명 또는 첨부파일 추가" 버튼 탐색
+function findDescriptionButton(scope) {
+    const searchScopes = [scope, document].filter(Boolean);
+    for (const root of searchScopes) {
+        const btns = Array.from(root.querySelectorAll('button, div[role="button"], span[role="button"], div[tabindex="0"]'));
+        for (const b of btns) {
+            // 이미 열려있는 에디터는 제외
+            if (b.getAttribute('contenteditable') === 'true' || b.getAttribute('role') === 'textbox') continue;
+
+            const label = (b.getAttribute('aria-label') || '').toLowerCase();
+            const text = (b.innerText || b.textContent || '').trim().toLowerCase();
+
+            // "설명 또는 첨부파일 추가", "설명 추가", "Add description", "Add description or attachments"
+            if (label.includes('설명') || label.includes('description') ||
+                text.includes('설명') || text.includes('description') ||
+                (text.includes('첨부파일') && !text.includes('google')) ||
+                (text.includes('attachment') && !text.includes('google'))) {
+                return b;
+            }
+        }
+    }
+    return null;
+}
+
 // 설명(Description) 자동완성
 async function applyDescription(scope, descText) {
-    if (!descText || !descText.trim()) return;
+    if (!descText || !descText.trim()) {
+        console.log("No description text to apply.");
+        return;
+    }
 
-    let editField = scope.querySelector('div[aria-label*="설명 추가"][contenteditable="true"], div[aria-label*="Add description"][contenteditable="true"], div[contenteditable="true"][role="textbox"]');
+    console.log("Applying description text:", descText.slice(0, 50));
+
+    let editField = findDescriptionEditable(scope);
 
     if (!editField) {
-        const descBtns = Array.from(scope.querySelectorAll('button, div[role="button"], span[role="button"]'));
-        const descBtn = descBtns.find(b => {
-            const label = b.getAttribute('aria-label') || '';
-            const text = (b.innerText || b.textContent || '').trim();
-            return label.includes('설명') || label.toLowerCase().includes('description') || text === '설명 추가' || text === 'Add description';
-        });
-
+        const descBtn = findDescriptionButton(scope);
         if (descBtn) {
-            console.log("Clicking Add Description button to expand editor...");
-            descBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-            descBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-            descBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-            await new Promise(r => setTimeout(r, 200));
+            console.log("Clicking Add Description button to expand editor:", descBtn);
+            triggerClick(descBtn);
 
-            editField = scope.querySelector('div[aria-label*="설명 추가"][contenteditable="true"], div[aria-label*="Add description"][contenteditable="true"], div[contenteditable="true"][role="textbox"]');
+            // 에디터가 마운트될 때까지 최대 1.5초간 폴링 (100ms * 15)
+            for (let i = 0; i < 15; i++) {
+                await new Promise(r => setTimeout(r, 100));
+                editField = findDescriptionEditable(scope);
+                if (editField) {
+                    console.log(`Description editor mounted after ${(i + 1) * 100}ms`);
+                    break;
+                }
+            }
+        } else {
+            console.warn("Could not find Add Description button");
         }
     }
 
     if (editField) {
-        console.log("Applying description text:", descText.slice(0, 30));
-        editField.focus();
+        console.log("Target description field found:", editField);
 
-        try {
-            document.execCommand('selectAll', false, null);
-            document.execCommand('insertText', false, descText);
-        } catch (e) {
-            editField.innerText = descText;
+        // 1. textarea인 경우
+        if (editField.tagName === 'TEXTAREA' || editField.tagName === 'INPUT') {
+            setVal(editField, descText);
+            return;
         }
 
+        // 2. contenteditable div인 경우
+        editField.focus();
+        await new Promise(r => setTimeout(r, 60));
+
+        // Selection 및 Range 설정 (커서를 에디터 안으로)
+        try {
+            const sel = window.getSelection();
+            const range = document.createRange();
+            range.selectNodeContents(editField);
+            sel.removeAllRanges();
+            sel.addRange(range);
+        } catch (e) {
+            console.warn("Failed to set selection range:", e);
+        }
+
+        // execCommand로 텍스트 삽입 (리액트가 가장 잘 인식하는 방식)
+        let inserted = false;
+        try {
+            document.execCommand('selectAll', false, null);
+            inserted = document.execCommand('insertText', false, descText);
+        } catch (e) {
+            console.warn("execCommand error:", e);
+        }
+
+        // execCommand 실패 시 DOM 직접 주입 및 InputEvent 디스패치
+        if (!inserted || (editField.innerText || '').trim() !== descText.trim()) {
+            console.log("Using fallback DOM insertion for description");
+            editField.textContent = descText;
+            try {
+                editField.dispatchEvent(new InputEvent('input', {
+                    bubbles: true,
+                    cancelable: true,
+                    inputType: 'insertText',
+                    data: descText
+                }));
+            } catch (e) { }
+        }
+
+        // 변경 이벤트 디스패치
         editField.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
         editField.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
-        await new Promise(r => setTimeout(r, 60));
+        editField.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: 'Process' }));
+
+        await new Promise(r => setTimeout(r, 100));
         editField.blur();
+        console.log("Description successfully applied!");
     } else {
-        console.warn("Could not find description editable field");
+        console.error("Could not find description editable field after button click");
     }
 }
 
@@ -1060,6 +1176,9 @@ function showSuggestions(matches, inputElement, type) {
             if (Array.isArray(match.attendees) && match.attendees.length > 0) {
                 displayText += ` <span style="color:#5f6368; font-size:0.85em; margin-left:4px;">👥 ${match.attendees.length}명</span>`;
             }
+            if (match.description) {
+                displayText += ` <span style="color:#5f6368; font-size:0.85em; margin-left:4px;" title="${escapeHTML(match.description.slice(0, 150))}">📝 설명</span>`;
+            }
         } else {
             const icon = type === 'locations' ? '📍 ' : '📝 ';
             displayText = icon + escapeHTML(match);
@@ -1071,6 +1190,8 @@ function showSuggestions(matches, inputElement, type) {
         div.addEventListener('click', async (e) => {
             e.preventDefault();
             e.stopPropagation();
+
+            console.log("Selected match for autocomplete:", match);
 
             if (type === 'titles') {
                 const activeDialog = getActiveDialog();
