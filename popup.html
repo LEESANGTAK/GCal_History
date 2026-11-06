@@ -70,7 +70,7 @@
         .setting-box {
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 8px;
             background-color: #f8f9fa;
             padding: 10px 12px;
             border-radius: 8px;
@@ -87,7 +87,7 @@
 
         select {
             width: 100%;
-            padding: 8px 10px;
+            padding: 7px 10px;
             border-radius: 6px;
             border: 1px solid #dadce0;
             background-color: #ffffff;
@@ -101,6 +101,30 @@
         select:focus {
             border-color: #1a73e8;
             box-shadow: 0 0 0 1px #1a73e8;
+        }
+
+        .checkbox-group {
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+        }
+
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: #3c4043;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .checkbox-item input[type="checkbox"] {
+            width: 15px;
+            height: 15px;
+            accent-color: #1a73e8;
+            cursor: pointer;
+            margin: 0;
         }
 
         .status-container {
@@ -163,6 +187,7 @@
             <button id="refreshBtn" title="일정 수동 새로고침" class="icon-btn">🔄</button>
         </div>
 
+        <!-- 1. 과거 일정 조회 기간 설정 -->
         <div class="setting-box">
             <div class="setting-label">
                 <span>과거 일정 조회 기간</span>
@@ -177,6 +202,32 @@
             </select>
         </div>
 
+        <!-- 2. 자동완성 항목 세부 설정 -->
+        <div class="setting-box">
+            <div class="setting-label">
+                <span>자동완성 적용 항목</span>
+            </div>
+            <div class="checkbox-group">
+                <label class="checkbox-item">
+                    <input type="checkbox" id="checkTime" checked>
+                    <span>기간 및 시간 자동완성</span>
+                </label>
+                <label class="checkbox-item">
+                    <input type="checkbox" id="checkAttendees" checked>
+                    <span>참석자 자동완성</span>
+                </label>
+                <label class="checkbox-item">
+                    <input type="checkbox" id="checkLocation" checked>
+                    <span>위치 자동완성</span>
+                </label>
+                <label class="checkbox-item">
+                    <input type="checkbox" id="checkDescription" checked>
+                    <span>설명 자동완성</span>
+                </label>
+            </div>
+        </div>
+
+        <!-- 3. 데이터 상태 및 프로그레스바 -->
         <div class="status-container">
             <div id="status" class="status-message">데이터 상태를 확인 중입니다...</div>
 
@@ -189,7 +240,7 @@
         </div>
 
         <p class="hint">
-            💡 일정을 등록하거나 조회 기간을 변경하면 백그라운드에서 자동으로 새로고침됩니다.
+            💡 일정을 등록하거나 설정을 변경하면 실시간으로 반영됩니다.
         </p>
     </div>
     <script src="popup.js"></script>

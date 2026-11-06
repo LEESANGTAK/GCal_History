@@ -1,7 +1,40 @@
 // 저장된 데이터 구조 초기화
 let historyData = {
-    items: [] // { title, location, description, calendarSummary, calendarId, startTime, endTime, isAllDay }
+    items: [] // { title, location, description, attendees, calendarSummary, calendarId, startTime, endTime, isAllDay }
 };
+
+// 사용자 설정 상태
+let userSettings = {
+    autoCompleteTime: true,
+    autoCompleteAttendees: true,
+    autoCompleteLocation: true,
+    autoCompleteDescription: true
+};
+
+// 사용자 설정 동기화
+function loadUserSettings() {
+    if (!chrome.storage?.sync) return;
+    chrome.storage.sync.get({
+        autoCompleteTime: true,
+        autoCompleteAttendees: true,
+        autoCompleteLocation: true,
+        autoCompleteDescription: true
+    }, (res) => {
+        userSettings = res;
+        console.log("Loaded user autocomplete settings:", userSettings);
+    });
+}
+loadUserSettings();
+
+try {
+    if (chrome.storage?.onChanged) {
+        chrome.storage.onChanged.addListener((changes, namespace) => {
+            if (namespace === 'sync') {
+                loadUserSettings();
+            }
+        });
+    }
+} catch (e) { }
 
 // 백그라운드 스크립트에서 자동완성할 일정 데이터 가져오기
 function loadCalendarEvents() {
@@ -306,7 +339,6 @@ function getDurationDays(match) {
     if (!match.startTime || !match.endTime) return 0;
 
     if (match.isAllDay) {
-        // 종일 일정: API의 end.date는 exclusive (예: 5/1~5/3 3일간 일정은 start: 2025-05-01, end: 2025-05-04)
         const sStr = match.startTime.includes('T') ? match.startTime.split('T')[0] : match.startTime;
         const eStr = match.endTime.includes('T') ? match.endTime.split('T')[0] : match.endTime;
         const s = new Date(sStr);
@@ -315,7 +347,6 @@ function getDurationDays(match) {
         const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
         return Math.max(diffDays, 1);
     } else {
-        // 시간 지정 일정: 시작일자와 종료일자 사이의 날짜 차이
         const sStr = match.startTime.split('T')[0];
         const eStr = match.endTime.split('T')[0];
         if (sStr === eStr) return 0; // 당일 일정
@@ -388,7 +419,6 @@ async function applyDateValue(inputEl, dateStr) {
 
     await new Promise(r => setTimeout(r, 60));
 
-    // 열린 달력 피커가 있다면 닫기
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true }));
     inputEl.blur();
 }
@@ -398,13 +428,11 @@ async function applyEventDates(activeDialog, match) {
     const durationDays = getDurationDays(match);
     console.log("Calculated duration days:", durationDays, "isAllDay:", match.isAllDay, "for event:", match.title);
 
-    // 당일 일정인 경우 종료 날짜를 변경하지 않음
     if (match.isAllDay && durationDays <= 1) return;
     if (!match.isAllDay && durationDays <= 0) return;
 
     let { startInput, endInput } = getDateInputs(activeDialog);
 
-    // 만약 시작 날짜만 있고 종료 날짜가 아직 화면에 안 보인다면: 시작 날짜를 클릭하여 날짜 입력 영역 확장 시도
     if (startInput && !endInput) {
         console.log("Only startInput found, attempting to expand date selector...");
         startInput.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
@@ -422,16 +450,12 @@ async function applyEventDates(activeDialog, match) {
         return;
     }
 
-    // 사용자가 현재 선택한 시작 날짜 파싱
     const startDate = parseDateString(startInput.value);
     if (!startDate) {
         console.warn("Could not parse current start date from value:", startInput.value);
         return;
     }
 
-    // 새 종료 날짜 계산
-    // 종일 일정: 화면 UI 종료 날짜는 마지막 날(inclusive)이므로 startDate + (durationDays - 1)
-    // 시간 지정 일정: startDate + durationDays
     const daysToAdd = match.isAllDay ? (durationDays - 1) : durationDays;
     if (daysToAdd <= 0) return;
 
@@ -443,9 +467,6 @@ async function applyEventDates(activeDialog, match) {
 
     if (endInput) {
         await applyDateValue(endInput, formattedEndDate);
-    } else {
-        // 종료 날짜 input이 따로 없는 경우 시작 날짜 input에 범위로 직접 입력 시도 (예: 2026. 11. 10. - 2026. 11. 12.)
-        console.log("End input not present, trying to set formatted end date or click datepicker");
     }
 }
 
@@ -461,25 +482,20 @@ async function applyEventTimes(activeDialog, match) {
     const isCurrentlyAllDay = isCheckboxChecked(allDayCb);
 
     if (match.isAllDay) {
-        // 종일 일정인 경우 종일 체크
         if (allDayCb && !isCurrentlyAllDay) {
             console.log("Checking all-day checkbox");
             allDayCb.click();
-            // 종일 체크박스를 클릭하면 시간 필드가 사라지고 종료 날짜가 생기는 DOM 변경 대기
             await new Promise(r => setTimeout(r, 200));
         }
         return;
     }
 
-    // 시간 지정 일정인 경우
-    // 1. 종일이 체크되어 있다면 해제
     if (allDayCb && isCurrentlyAllDay) {
         console.log("Unchecking all-day checkbox");
         allDayCb.click();
         await new Promise(r => setTimeout(r, 200));
     }
 
-    // 2. 시간 입력창이 안 보이고 "시간 추가" 버튼이 있다면 클릭
     let { startInput, endInput } = getTimeInputs(activeDialog);
     if (!startInput) {
         const addTimeBtn = getAddTimeButton(activeDialog);
@@ -496,7 +512,6 @@ async function applyEventTimes(activeDialog, match) {
     const startObj = extractTime(match.startTime);
     const endObj = extractTime(match.endTime);
 
-    // 3. 시작 시간 적용
     if (startInput && startObj) {
         const startFormatted = formatTime(startObj.hours, startObj.minutes, startInput.value);
         console.log("Setting start time to:", startFormatted);
@@ -504,7 +519,6 @@ async function applyEventTimes(activeDialog, match) {
         await new Promise(r => setTimeout(r, 100));
     }
 
-    // 4. 종료 시간 적용 (시작 시간 변경 후 재탐색)
     const updatedInputs = getTimeInputs(activeDialog);
     const finalEndInput = updatedInputs.endInput || endInput;
     if (finalEndInput && endObj) {
@@ -515,77 +529,206 @@ async function applyEventTimes(activeDialog, match) {
     }
 }
 
+// 위치(Location) 자동완성
+async function applyLocation(scope, locationText) {
+    if (!locationText || !locationText.trim()) return;
+
+    let locInput = scope.querySelector('input[aria-label="위치 추가"], input[aria-label="Add location"], input[placeholder*="위치 추가"], input[placeholder*="Add location"]');
+
+    if (!locInput) {
+        const btns = Array.from(scope.querySelectorAll('button, div[role="button"], span[role="button"]'));
+        const locBtn = btns.find(b => {
+            const label = b.getAttribute('aria-label') || '';
+            const text = (b.innerText || b.textContent || '').trim();
+            return label.includes('위치') || label.toLowerCase().includes('location') || text === '위치 추가' || text === 'Add location';
+        });
+
+        if (locBtn) {
+            locBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            await new Promise(r => setTimeout(r, 200));
+            locInput = scope.querySelector('input[aria-label="위치 추가"], input[aria-label="Add location"], input[placeholder*="위치 추가"], input[placeholder*="Add location"]');
+        }
+    }
+
+    if (locInput) {
+        console.log("Setting location to:", locationText);
+        setVal(locInput, locationText);
+    }
+}
+
+// 설명(Description) 자동완성
+async function applyDescription(scope, descText) {
+    if (!descText || !descText.trim()) return;
+
+    let editField = scope.querySelector('div[aria-label*="설명 추가"][contenteditable="true"], div[aria-label*="Add description"][contenteditable="true"], div[contenteditable="true"][role="textbox"]');
+
+    if (!editField) {
+        const descBtns = Array.from(scope.querySelectorAll('button, div[role="button"], span[role="button"]'));
+        const descBtn = descBtns.find(b => {
+            const label = b.getAttribute('aria-label') || '';
+            const text = (b.innerText || b.textContent || '').trim();
+            return label.includes('설명') || label.toLowerCase().includes('description') || text === '설명 추가' || text === 'Add description';
+        });
+
+        if (descBtn) {
+            console.log("Clicking Add Description button to expand editor...");
+            descBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+            descBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+            descBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            await new Promise(r => setTimeout(r, 200));
+
+            editField = scope.querySelector('div[aria-label*="설명 추가"][contenteditable="true"], div[aria-label*="Add description"][contenteditable="true"], div[contenteditable="true"][role="textbox"]');
+        }
+    }
+
+    if (editField) {
+        console.log("Applying description text:", descText.slice(0, 30));
+        editField.focus();
+
+        try {
+            document.execCommand('selectAll', false, null);
+            document.execCommand('insertText', false, descText);
+        } catch (e) {
+            editField.innerText = descText;
+        }
+
+        editField.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+        editField.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+        await new Promise(r => setTimeout(r, 60));
+        editField.blur();
+    } else {
+        console.warn("Could not find description editable field");
+    }
+}
+
+// 참석자(Attendees) 자동완성
+async function applyAttendees(scope, attendees) {
+    if (!Array.isArray(attendees) || attendees.length === 0) return;
+
+    let guestInput = scope.querySelector('input[placeholder*="참석자 추가"], input[placeholder*="Add guests"], input[aria-label*="참석자 추가"], input[aria-label*="Add guests"]');
+
+    if (!guestInput) {
+        const guestBtns = Array.from(scope.querySelectorAll('button, div[role="button"], span[role="button"]'));
+        const guestBtn = guestBtns.find(b => {
+            const label = b.getAttribute('aria-label') || '';
+            const text = (b.innerText || b.textContent || '').trim();
+            return label.includes('참석자') || label.toLowerCase().includes('guests') || text === '참석자 추가' || text === 'Add guests';
+        });
+
+        if (guestBtn) {
+            console.log("Clicking Add Guests button to expand guest input...");
+            guestBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+            guestBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+            guestBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            await new Promise(r => setTimeout(r, 200));
+
+            guestInput = scope.querySelector('input[placeholder*="참석자 추가"], input[placeholder*="Add guests"], input[aria-label*="참석자 추가"], input[aria-label*="Add guests"]');
+        }
+    }
+
+    if (guestInput) {
+        console.log("Applying attendees:", attendees);
+        for (const email of attendees) {
+            guestInput.focus();
+
+            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+            if (nativeInputValueSetter) {
+                nativeInputValueSetter.call(guestInput, email);
+            } else {
+                guestInput.value = email;
+            }
+
+            guestInput.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+            guestInput.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+
+            await new Promise(r => setTimeout(r, 100));
+
+            guestInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+            guestInput.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+            guestInput.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+
+            await new Promise(r => setTimeout(r, 150));
+        }
+        guestInput.blur();
+    } else {
+        console.warn("Could not find guest input in dialog");
+    }
+}
+
+// 캘린더 드롭다운 선택
+async function setCalendarSelection(activeDialog, calendarSummary) {
+    if (!calendarSummary) return;
+
+    let targetBtn = activeDialog.querySelector('[aria-label="캘린더"][aria-haspopup="listbox"], [aria-label="Calendar"][aria-haspopup="listbox"], [data-is-calendar-selector="true"]');
+
+    if (!targetBtn) {
+        const allLists = Array.from(activeDialog.querySelectorAll('[aria-haspopup="listbox"], [role="combobox"]'));
+        targetBtn = allLists.find(btn => {
+            const text = btn.innerText || '';
+            const label = btn.getAttribute('aria-label') || '';
+            if (label.includes('캘린더') || label.includes('Calendar')) return true;
+            const iconSvg = btn.querySelector('svg');
+            if (iconSvg && btn.textContent) return true;
+            return false;
+        });
+
+        if (!targetBtn) {
+            const anyCalendarTipped = activeDialog.querySelector('[data-tooltip*="캘린더"], [data-tooltip*="Calendar"]');
+            if (anyCalendarTipped) {
+                targetBtn = anyCalendarTipped.closest('[role="button"]') || anyCalendarTipped;
+            }
+        }
+    }
+
+    if (targetBtn) {
+        if (targetBtn.innerText && targetBtn.innerText.includes(calendarSummary)) {
+            console.log("Already selected desired calendar:", calendarSummary);
+        } else {
+            console.log("Found calendar dropdown:", targetBtn);
+            targetBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+            targetBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+
+            await new Promise(r => setTimeout(r, 200));
+
+            const openMenus = Array.from(document.querySelectorAll('[role="listbox"], [role="menu"]')).filter(m => m.offsetParent !== null && !m.closest('[data-view-family]'));
+
+            let listItems = [];
+            openMenus.forEach(menu => {
+                listItems = listItems.concat(Array.from(menu.querySelectorAll('[role="menuitem"], [role="option"]')));
+            });
+
+            if (listItems.length === 0) {
+                listItems = Array.from(document.querySelectorAll('[role="menuitem"], [role="option"]')).filter(el => !el.closest('[aria-label="내 캘린더"], [aria-label="My calendars"], #drawer'));
+            }
+
+            const optionToClick = listItems.find(li => li.innerText && li.innerText.includes(calendarSummary));
+
+            if (optionToClick) {
+                console.log("Clicking calendar option:", optionToClick);
+                const clickTarget = optionToClick.querySelector('div, span') || optionToClick;
+
+                ['mousedown', 'mouseup', 'click'].forEach(eventType => {
+                    clickTarget.dispatchEvent(new MouseEvent(eventType, {
+                        bubbles: true,
+                        cancelable: true,
+                        view: window
+                    }));
+                });
+            } else {
+                console.log("Could not find calendar option for:", calendarSummary);
+                document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true }));
+            }
+        }
+    }
+}
+
 // 캘린더 및 시간/날짜 자동완성 메인 함수
 async function setCalendarAndTimes(match) {
     const activeDialog = getActiveDialog();
 
-    // 1. 캘린더 선택 자동완성
+    // 1. 캘린더 선택
     if (match.calendarSummary) {
-        let targetBtn = null;
-
-        targetBtn = activeDialog.querySelector('[aria-label="캘린더"][aria-haspopup="listbox"], [aria-label="Calendar"][aria-haspopup="listbox"], [data-is-calendar-selector="true"]');
-
-        if (!targetBtn) {
-            const allLists = Array.from(activeDialog.querySelectorAll('[aria-haspopup="listbox"], [role="combobox"]'));
-            targetBtn = allLists.find(btn => {
-                const text = btn.innerText || '';
-                const label = btn.getAttribute('aria-label') || '';
-                if (label.includes('캘린더') || label.includes('Calendar')) return true;
-                const iconSvg = btn.querySelector('svg');
-                if (iconSvg && btn.textContent) return true;
-                return false;
-            });
-
-            if (!targetBtn) {
-                const anyCalendarTipped = activeDialog.querySelector('[data-tooltip*="캘린더"], [data-tooltip*="Calendar"]');
-                if (anyCalendarTipped) {
-                    targetBtn = anyCalendarTipped.closest('[role="button"]') || anyCalendarTipped;
-                }
-            }
-        }
-
-        if (targetBtn) {
-            if (targetBtn.innerText && targetBtn.innerText.includes(match.calendarSummary)) {
-                console.log("Already selected desired calendar:", match.calendarSummary);
-            } else {
-                console.log("Found calendar dropdown:", targetBtn);
-                targetBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-                targetBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-
-                await new Promise(r => setTimeout(r, 200));
-
-                const openMenus = Array.from(document.querySelectorAll('[role="listbox"], [role="menu"]')).filter(m => m.offsetParent !== null && !m.closest('[data-view-family]'));
-
-                let listItems = [];
-                openMenus.forEach(menu => {
-                    listItems = listItems.concat(Array.from(menu.querySelectorAll('[role="menuitem"], [role="option"]')));
-                });
-
-                if (listItems.length === 0) {
-                    listItems = Array.from(document.querySelectorAll('[role="menuitem"], [role="option"]')).filter(el => !el.closest('[aria-label="내 캘린더"], [aria-label="My calendars"], #drawer'));
-                }
-
-                const optionToClick = listItems.find(li => li.innerText && li.innerText.includes(match.calendarSummary));
-
-                if (optionToClick) {
-                    console.log("Clicking calendar option:", optionToClick);
-                    const clickTarget = optionToClick.querySelector('div, span') || optionToClick;
-
-                    ['mousedown', 'mouseup', 'click'].forEach(eventType => {
-                        clickTarget.dispatchEvent(new MouseEvent(eventType, {
-                            bubbles: true,
-                            cancelable: true,
-                            view: window
-                        }));
-                    });
-                } else {
-                    console.log("Could not find calendar option for:", match.calendarSummary);
-                    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true }));
-                }
-            }
-        } else {
-            console.log("Calendar dropdown button not found in DOM.");
-        }
+        await setCalendarSelection(activeDialog, match.calendarSummary);
     }
 
     // 2. 시간 및 다일 일정 날짜 자동완성
@@ -620,6 +763,7 @@ function handleEventSaved() {
             title: newTitle.trim(),
             location: inputs.location ? getVal(inputs.location).trim() : "",
             description: inputs.desc ? getVal(inputs.desc).trim() : "",
+            attendees: [],
             calendarSummary: "",
             calendarId: "",
             startTime: startInput ? (startInput.value || "") : "",
@@ -913,6 +1057,9 @@ function showSuggestions(matches, inputElement, type) {
                     displayText += ` <span style="color:#1a73e8; font-size:0.85em; margin-left:4px;">⏰ ${sStr}${eStr}${durStr}</span>`;
                 }
             }
+            if (Array.isArray(match.attendees) && match.attendees.length > 0) {
+                displayText += ` <span style="color:#5f6368; font-size:0.85em; margin-left:4px;">👥 ${match.attendees.length}명</span>`;
+            }
         } else {
             const icon = type === 'locations' ? '📍 ' : '📝 ';
             displayText = icon + escapeHTML(match);
@@ -921,21 +1068,38 @@ function showSuggestions(matches, inputElement, type) {
         textSpan.innerHTML = displayText;
         div.appendChild(textSpan);
 
-        div.addEventListener('click', (e) => {
+        div.addEventListener('click', async (e) => {
             e.preventDefault();
             e.stopPropagation();
 
             if (type === 'titles') {
-                const inputs = getInputs();
+                const activeDialog = getActiveDialog();
 
-                if (match.location && inputs.location) setVal(inputs.location, match.location);
-                if (match.description && inputs.desc) setVal(inputs.desc, match.description);
+                // 1. 위치 자동완성 (설정 켜진 경우)
+                if (userSettings.autoCompleteLocation && match.location) {
+                    await applyLocation(activeDialog, match.location);
+                }
 
-                // 선택한 일정명에 맞게 캘린더, 시간 및 기간(다일 일정) 설정
-                setCalendarAndTimes(match).then(() => {
-                    setVal(inputElement, match.title);
-                    inputElement.focus();
-                });
+                // 2. 설명 자동완성 (설정 켜진 경우)
+                if (userSettings.autoCompleteDescription && match.description) {
+                    await applyDescription(activeDialog, match.description);
+                }
+
+                // 3. 참석자 자동완성 (설정 켜진 경우)
+                if (userSettings.autoCompleteAttendees && Array.isArray(match.attendees) && match.attendees.length > 0) {
+                    await applyAttendees(activeDialog, match.attendees);
+                }
+
+                // 4. 기간/시간 및 캘린더 자동완성
+                if (userSettings.autoCompleteTime) {
+                    await setCalendarAndTimes(match);
+                } else if (match.calendarSummary) {
+                    await setCalendarSelection(activeDialog, match.calendarSummary);
+                }
+
+                // 5. 제목 확정 및 포커스
+                setVal(inputElement, match.title);
+                inputElement.focus();
 
             } else {
                 setVal(inputElement, match);

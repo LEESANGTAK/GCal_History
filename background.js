@@ -105,7 +105,6 @@ async function fetchCalendarEvents(interactive = true) {
                 let pageCount = 0;
 
                 try {
-                    // 페이지네이션을 통해 500개 이상 등록된 일정이나 과거 일정도 누락 없이 수집 (최대 2,500개)
                     do {
                         let url = `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events?timeMin=${timeMinStr}&maxResults=250&singleEvents=true&orderBy=startTime`;
                         if (pageToken) {
@@ -171,10 +170,22 @@ async function fetchCalendarEvents(interactive = true) {
 
                 if (title && !seenKeys.has(key)) {
                     seenKeys.add(key);
+
+                    // 참석자 목록 수집 (본인 및 회의실 리소스 제외)
+                    const attendees = [];
+                    if (Array.isArray(event.attendees)) {
+                        for (const att of event.attendees) {
+                            if (!att.resource && !att.self && att.email) {
+                                attendees.push(att.email);
+                            }
+                        }
+                    }
+
                     items.push({
                         title: title,
                         location: location,
-                        description: event.description ? event.description.replace(/(<([^>]+)>)/gi, "") : '',
+                        description: event.description ? event.description.replace(/(<([^>]+)>)/gi, "").trim() : '',
+                        attendees: attendees,
                         calendarSummary: event._calendarSummary || '',
                         calendarId: event._calendarId || '',
                         startTime: event.start?.dateTime || event.start?.date || '',

@@ -6,14 +6,46 @@ document.addEventListener('DOMContentLoaded', function () {
     const progressBar = document.getElementById('progress-bar');
     const progressText = document.getElementById('progress-text');
 
-    // 1. 저장된 조회 기간 설정 불러오기
-    chrome.storage.sync.get({ fetchRangeMonths: 12 }, function (res) {
-        if (res.fetchRangeMonths) {
+    const checkTime = document.getElementById('checkTime');
+    const checkAttendees = document.getElementById('checkAttendees');
+    const checkLocation = document.getElementById('checkLocation');
+    const checkDescription = document.getElementById('checkDescription');
+
+    // 1. 저장된 조회 기간 및 자동완성 세부 설정 불러오기
+    chrome.storage.sync.get({
+        fetchRangeMonths: 12,
+        autoCompleteTime: true,
+        autoCompleteAttendees: true,
+        autoCompleteLocation: true,
+        autoCompleteDescription: true
+    }, function (res) {
+        if (res.fetchRangeMonths && rangeSelect) {
             rangeSelect.value = String(res.fetchRangeMonths);
         }
+        if (checkTime) checkTime.checked = res.autoCompleteTime !== false;
+        if (checkAttendees) checkAttendees.checked = res.autoCompleteAttendees !== false;
+        if (checkLocation) checkLocation.checked = res.autoCompleteLocation !== false;
+        if (checkDescription) checkDescription.checked = res.autoCompleteDescription !== false;
     });
 
-    // 2. 현재 캐시 상태 확인
+    // 2. 자동완성 세부 항목 변경 리스너 등록
+    const setupCheckboxSync = (checkbox, key) => {
+        if (!checkbox) return;
+        checkbox.addEventListener('change', function () {
+            const updateObj = {};
+            updateObj[key] = checkbox.checked;
+            chrome.storage.sync.set(updateObj, function () {
+                console.log(`Setting ${key} updated:`, checkbox.checked);
+            });
+        });
+    };
+
+    setupCheckboxSync(checkTime, 'autoCompleteTime');
+    setupCheckboxSync(checkAttendees, 'autoCompleteAttendees');
+    setupCheckboxSync(checkLocation, 'autoCompleteLocation');
+    setupCheckboxSync(checkDescription, 'autoCompleteDescription');
+
+    // 3. 현재 캐시 상태 확인
     chrome.storage.local.get(['cachedEvents'], function (result) {
         if (result.cachedEvents && result.cachedEvents.length > 0) {
             statusDiv.textContent = `현재 ${result.cachedEvents.length}개의 추천 일정이 준비되어 있습니다.`;
@@ -23,7 +55,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
-    // 3. 백그라운드로부터 진행 상태 메시지 수신
+    // 4. 백그라운드로부터 진행 상태 메시지 수신
     chrome.runtime.onMessage.addListener((message) => {
         if (message.action === 'fetchProgress') {
             if (message.status === 'fetching') {
@@ -45,7 +77,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
-    // 4. 새로고침 실행 함수
+    // 5. 새로고침 실행 함수
     function startRefresh() {
         statusDiv.textContent = '캘린더 데이터 동기화 중...';
         statusDiv.style.color = '#3c4043';
@@ -69,7 +101,7 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    // 5. 조회 기간 변경 시 저장 및 즉시 자동 새로고침
+    // 6. 조회 기간 변경 시 저장 및 즉시 자동 새로고침
     rangeSelect.addEventListener('change', function () {
         const selectedMonths = parseInt(rangeSelect.value, 10);
         chrome.storage.sync.set({ fetchRangeMonths: selectedMonths }, function () {
@@ -78,7 +110,7 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
-    // 6. 수동 새로고침 아이콘 버튼 클릭
+    // 7. 수동 새로고침 아이콘 버튼 클릭
     refreshBtn.addEventListener('click', function () {
         startRefresh();
     });
