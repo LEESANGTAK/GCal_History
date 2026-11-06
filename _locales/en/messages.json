@@ -1,0 +1,55 @@
+{
+  "extName": {
+    "message": "G-Cal History (Google Calendar Autocomplete)",
+    "description": "Extension name"
+  },
+  "extDescription": {
+    "message": "Remembers past Google Calendar event titles and details to auto-suggest and fill them seamlessly.",
+    "description": "Extension description"
+  },
+  "refreshTooltip": {
+    "message": "Refresh events"
+  },
+  "rangeLabel": {
+    "message": "Past Event Lookup Range"
+  },
+  "range1": {
+    "message": "Past 1 month"
+  },
+  "range3": {
+    "message": "Past 3 months"
+  },
+  "range6": {
+    "message": "Past 6 months"
+  },
+  "range12": {
+    "message": "Past 1 year (Default)"
+  },
+  "range24": {
+    "message": "Past 2 years"
+  },
+  "range36": {
+    "message": "Past 3 years"
+  },
+  "optionsLabel": {
+    "message": "Autocomplete Options"
+  },
+  "optTime": {
+    "message": "Time & Duration"
+  },
+  "optAttendees": {
+    "message": "Attendees"
+  },
+  "optLocation": {
+    "message": "Location"
+  },
+  "optDescription": {
+    "message": "Description"
+  },
+  "statusChecking": {
+    "message": "Checking data status..."
+  },
+  "hintText": {
+    "message": "💡 Changes are synced in real-time as you create events or update settings."
+  }
+}

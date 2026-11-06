@@ -130,18 +130,20 @@ document.addEventListener('DOMContentLoaded', function () {
     const currentLang = getAppLanguage();
     const t = I18N[currentLang] || I18N.en;
 
-    // UI 텍스트 일괄 적용
+    // UI 텍스트 일괄 적용 (chrome.i18n 공식 API 우선 활용)
     document.querySelectorAll('[data-i18n]').forEach(el => {
         const key = el.getAttribute('data-i18n');
-        if (t[key]) {
-            el.textContent = t[key];
+        const msg = (chrome.i18n && chrome.i18n.getMessage(key)) || (t && t[key]);
+        if (msg) {
+            el.textContent = msg;
         }
     });
 
     document.querySelectorAll('[data-i18n-title]').forEach(el => {
         const key = el.getAttribute('data-i18n-title');
-        if (t[key]) {
-            el.setAttribute('title', t[key]);
+        const msg = (chrome.i18n && chrome.i18n.getMessage(key)) || (t && t[key]);
+        if (msg) {
+            el.setAttribute('title', msg);
         }
     });
 

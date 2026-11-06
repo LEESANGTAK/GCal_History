@@ -1,0 +1,55 @@
+{
+  "extName": {
+    "message": "G-Cal History (Google カレンダー自動入力)",
+    "description": "拡張機能の名前"
+  },
+  "extDescription": {
+    "message": "過去に入力した Google カレンダーの予定を記憶し、タイトルや詳細を自動でおすすめ・入力します。",
+    "description": "拡張機能の説明"
+  },
+  "refreshTooltip": {
+    "message": "予定を手動更新"
+  },
+  "rangeLabel": {
+    "message": "過去の予定の取得期間"
+  },
+  "range1": {
+    "message": "過去1か月"
+  },
+  "range3": {
+    "message": "過去3か月"
+  },
+  "range6": {
+    "message": "過去6か月"
+  },
+  "range12": {
+    "message": "過去1年 (デフォルト)"
+  },
+  "range24": {
+    "message": "過去2年"
+  },
+  "range36": {
+    "message": "過去3年"
+  },
+  "optionsLabel": {
+    "message": "自動入力の適用項目"
+  },
+  "optTime": {
+    "message": "期間と時間"
+  },
+  "optAttendees": {
+    "message": "ゲスト (参加者)"
+  },
+  "optLocation": {
+    "message": "場所"
+  },
+  "optDescription": {
+    "message": "説明"
+  },
+  "statusChecking": {
+    "message": "データ状態を確認しています..."
+  },
+  "hintText": {
+    "message": "💡 予定の登録や設定の変更はリアルタイムで反映されます。"
+  }
+}

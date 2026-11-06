@@ -1,0 +1,55 @@
+{
+  "extName": {
+    "message": "G-Cal History (Google 日历自动填充)",
+    "description": "扩展程序名称"
+  },
+  "extDescription": {
+    "message": "记住以往输入的 Google 日历日程，智能推荐并自动填充标题与详细信息。",
+    "description": "扩展程序说明"
+  },
+  "refreshTooltip": {
+    "message": "手动刷新日程"
+  },
+  "rangeLabel": {
+    "message": "以往日程获取范围"
+  },
+  "range1": {
+    "message": "最近1个月"
+  },
+  "range3": {
+    "message": "最近3个月"
+  },
+  "range6": {
+    "message": "最近6个月"
+  },
+  "range12": {
+    "message": "最近1年 (默认)"
+  },
+  "range24": {
+    "message": "最近2年"
+  },
+  "range36": {
+    "message": "最近3年"
+  },
+  "optionsLabel": {
+    "message": "自动填充应用项目"
+  },
+  "optTime": {
+    "message": "期间与时间"
+  },
+  "optAttendees": {
+    "message": "参与人"
+  },
+  "optLocation": {
+    "message": "位置"
+  },
+  "optDescription": {
+    "message": "说明"
+  },
+  "statusChecking": {
+    "message": "正在检查数据状态..."
+  },
+  "hintText": {
+    "message": "💡 登记日程或更改设置时将实时生效。"
+  }
+}
