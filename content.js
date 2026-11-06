@@ -1159,6 +1159,9 @@ function showSuggestions(matches, inputElement, type) {
         textSpan.style.textOverflow = 'ellipsis';
         textSpan.style.whiteSpace = 'nowrap';
 
+        const isKoreanUI = (navigator.language && navigator.language.startsWith('ko')) ||
+            !!document.querySelector('[aria-label*="시작 시간"], [aria-label*="저장"], [aria-label*="제목 추가"]');
+
         let displayText = '';
         if (type === 'titles') {
             displayText = `<strong>${escapeHTML(match.title)}</strong>`;
@@ -1168,9 +1171,11 @@ function showSuggestions(matches, inputElement, type) {
             if (match.isAllDay) {
                 const duration = getDurationDays(match);
                 if (duration > 1) {
-                    displayText += ` <span style="color:#1a73e8; font-size:0.85em; margin-left:4px;">📅 ${duration}일간 (종일)</span>`;
+                    const durLabel = isKoreanUI ? `${duration}일간 (종일)` : `${duration} days (All day)`;
+                    displayText += ` <span style="color:#1a73e8; font-size:0.85em; margin-left:4px;">📅 ${durLabel}</span>`;
                 } else {
-                    displayText += ` <span style="color:#1a73e8; font-size:0.85em; margin-left:4px;">📅 종일</span>`;
+                    const allDayLabel = isKoreanUI ? '종일' : 'All day';
+                    displayText += ` <span style="color:#1a73e8; font-size:0.85em; margin-left:4px;">📅 ${allDayLabel}</span>`;
                 }
             } else if (match.startTime) {
                 const duration = getDurationDays(match);
@@ -1179,15 +1184,19 @@ function showSuggestions(matches, inputElement, type) {
                 if (sObj) {
                     const sStr = formatTime(sObj.hours, sObj.minutes);
                     const eStr = eObj ? ` ~ ${formatTime(eObj.hours, eObj.minutes)}` : '';
-                    const durStr = duration > 0 ? ` (${duration + 1}일간)` : '';
-                    displayText += ` <span style="color:#1a73e8; font-size:0.85em; margin-left:4px;">⏰ ${sStr}${eStr}${durStr}</span>`;
+                    const durLabel = duration > 0 ? (isKoreanUI ? ` (${duration + 1}일간)` : ` (${duration + 1} days)`) : '';
+                    displayText += ` <span style="color:#1a73e8; font-size:0.85em; margin-left:4px;">⏰ ${sStr}${eStr}${durLabel}</span>`;
                 }
             }
             if (Array.isArray(match.attendees) && match.attendees.length > 0) {
-                displayText += ` <span style="color:#5f6368; font-size:0.85em; margin-left:4px;">👥 ${match.attendees.length}명</span>`;
+                const guestLabel = isKoreanUI 
+                    ? `${match.attendees.length}명` 
+                    : `${match.attendees.length} ${match.attendees.length === 1 ? 'guest' : 'guests'}`;
+                displayText += ` <span style="color:#5f6368; font-size:0.85em; margin-left:4px;">👥 ${guestLabel}</span>`;
             }
             if (match.description) {
-                displayText += ` <span style="color:#5f6368; font-size:0.85em; margin-left:4px;" title="${escapeHTML(match.description.slice(0, 150))}">📝 설명</span>`;
+                const descLabel = isKoreanUI ? '설명' : 'Description';
+                displayText += ` <span style="color:#5f6368; font-size:0.85em; margin-left:4px;" title="${escapeHTML(match.description.slice(0, 150))}">📝 ${descLabel}</span>`;
             }
         } else {
             const icon = type === 'locations' ? '📍 ' : '📝 ';

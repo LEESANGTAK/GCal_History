@@ -184,52 +184,52 @@
     <div class="container">
         <div class="header-row">
             <h2>G-Cal History</h2>
-            <button id="refreshBtn" title="일정 수동 새로고침" class="icon-btn">🔄</button>
+            <button id="refreshBtn" title="일정 수동 새로고침" data-i18n-title-en="Refresh events" class="icon-btn">🔄</button>
         </div>
 
         <!-- 1. 과거 일정 조회 기간 설정 -->
         <div class="setting-box">
             <div class="setting-label">
-                <span>과거 일정 조회 기간</span>
+                <span data-i18n-en="Past Event Lookup Range">과거 일정 조회 기간</span>
             </div>
             <select id="rangeSelect">
-                <option value="1">최근 1개월</option>
-                <option value="3">최근 3개월</option>
-                <option value="6">최근 6개월</option>
-                <option value="12" selected>최근 1년 (기본값)</option>
-                <option value="24">최근 2년</option>
-                <option value="36">최근 3년</option>
+                <option value="1" data-i18n-en="Past 1 month">최근 1개월</option>
+                <option value="3" data-i18n-en="Past 3 months">최근 3개월</option>
+                <option value="6" data-i18n-en="Past 6 months">최근 6개월</option>
+                <option value="12" selected data-i18n-en="Past 1 year (Default)">최근 1년 (기본값)</option>
+                <option value="24" data-i18n-en="Past 2 years">최근 2년</option>
+                <option value="36" data-i18n-en="Past 3 years">최근 3년</option>
             </select>
         </div>
 
         <!-- 2. 자동완성 항목 세부 설정 -->
         <div class="setting-box">
             <div class="setting-label">
-                <span>자동완성 적용 항목</span>
+                <span data-i18n-en="Autocomplete Options">자동완성 적용 항목</span>
             </div>
             <div class="checkbox-group">
                 <label class="checkbox-item">
                     <input type="checkbox" id="checkTime" checked>
-                    <span>기간 및 시간 자동완성</span>
+                    <span data-i18n-en="Time & Duration">기간 및 시간 자동완성</span>
                 </label>
                 <label class="checkbox-item">
                     <input type="checkbox" id="checkAttendees" checked>
-                    <span>참석자 자동완성</span>
+                    <span data-i18n-en="Attendees">참석자 자동완성</span>
                 </label>
                 <label class="checkbox-item">
                     <input type="checkbox" id="checkLocation" checked>
-                    <span>위치 자동완성</span>
+                    <span data-i18n-en="Location">위치 자동완성</span>
                 </label>
                 <label class="checkbox-item">
                     <input type="checkbox" id="checkDescription" checked>
-                    <span>설명 자동완성</span>
+                    <span data-i18n-en="Description">설명 자동완성</span>
                 </label>
             </div>
         </div>
 
         <!-- 3. 데이터 상태 및 프로그레스바 -->
         <div class="status-container">
-            <div id="status" class="status-message">데이터 상태를 확인 중입니다...</div>
+            <div id="status" class="status-message" data-i18n-en="Checking data status...">데이터 상태를 확인 중입니다...</div>
 
             <div id="progress-container" style="display: none;">
                 <div class="progress-track">
@@ -239,7 +239,7 @@
             </div>
         </div>
 
-        <p class="hint">
+        <p class="hint" data-i18n-en="💡 Changes are synced in real-time as you create events or update settings.">
             💡 일정을 등록하거나 설정을 변경하면 실시간으로 반영됩니다.
         </p>
     </div>
