@@ -6,7 +6,6 @@ let historyData = {
 // 백그라운드 스크립트에서 자동완성할 일정 데이터 가져오기
 function loadCalendarEvents() {
     return new Promise((resolve) => {
-        // 확장 프로그램이 새로고침되어 컨텍스트가 끊긴 경우 안전하게 리턴
         if (!chrome.runtime?.id) {
             resolve(false);
             return;
@@ -30,7 +29,6 @@ function loadCalendarEvents() {
                 }
             });
         } catch (err) {
-            // Extension context invalidated 에러 방어
             resolve(false);
         }
     });
@@ -195,59 +193,85 @@ function getTimeInputs(scope) {
     return { startInput, endInput };
 }
 
-// 시작 날짜 및 종료 날짜 input 탐색
+// 시작 날짜 및 종료 날짜 input 정밀 탐색
 function getDateInputs(scope) {
-    let startInput = scope.querySelector('input[aria-label*="시작 날짜"], input[aria-label*="Start date"]');
-    let endInput = scope.querySelector('input[aria-label*="종료 날짜"], input[aria-label*="End date"]');
+    let startInput = scope.querySelector('input[aria-label*="시작 날짜"], input[aria-label*="Start date"], input[aria-label*="시작일"]');
+    let endInput = scope.querySelector('input[aria-label*="종료 날짜"], input[aria-label*="End date"], input[aria-label*="종료일"]');
 
-    if (!startInput || !endInput) {
-        const dateRegex = /(\d{4}[^\d]+\d{1,2}[^\d]+\d{1,2}|\d{1,2}\/\d{1,2}\/\d{4})/;
-        const allInputs = Array.from(scope.querySelectorAll('input:not([type="hidden"]):not([type="checkbox"])'));
-        const dateInputs = allInputs.filter(inp => {
-            const aria = inp.getAttribute('aria-label') || '';
-            const val = inp.value || '';
-            return aria.includes('날짜') || aria.toLowerCase().includes('date') || dateRegex.test(val);
-        });
+    if (startInput && endInput) {
+        return { startInput, endInput };
+    }
 
-        if (dateInputs.length >= 2) {
-            if (!startInput) startInput = dateInputs[0];
-            if (!endInput) endInput = dateInputs[1];
-        } else if (dateInputs.length === 1 && !startInput) {
-            startInput = dateInputs[0];
-        }
+    // 대체 탐색: 제목, 위치, 시간을 제외한 텍스트 input 탐색
+    const allInputs = Array.from(scope.querySelectorAll('input:not([type="hidden"]):not([type="checkbox"])'));
+    const candidateInputs = allInputs.filter(inp => {
+        const aria = inp.getAttribute('aria-label') || '';
+        const placeholder = inp.getAttribute('placeholder') || '';
+        const val = inp.value || '';
+
+        // 제목 및 위치 필드 제외
+        if (aria.includes('제목') || aria.toLowerCase().includes('title') || placeholder.includes('제목')) return false;
+        if (aria.includes('위치') || aria.toLowerCase().includes('location') || placeholder.includes('위치')) return false;
+
+        // 시간 필드 제외 (오전/오후, AM/PM, HH:MM 패턴 또는 aria에 '시간' 포함)
+        const timeRegex = /(오전|오후|\bAM\b|\bPM\b|\b[0-2]?[0-9]:[0-5][0-9])/i;
+        if (timeRegex.test(val) || aria.includes('시간') || aria.toLowerCase().includes('time')) return false;
+
+        // 날짜 패턴(연도가 있거나 없거나: 11월 10일, 11. 10., 2026. 11. 10., 11/10 등) 또는 aria에 날짜 포함
+        const dateRegex = /(\d{1,2}[월\.]\s*\d{1,2}|\d{4}[^\d]+\d{1,2}|\d{1,2}\/\d{1,2})/;
+        return aria.includes('날짜') || aria.toLowerCase().includes('date') || dateRegex.test(val) || dateRegex.test(aria);
+    });
+
+    if (candidateInputs.length >= 2) {
+        if (!startInput) startInput = candidateInputs[0];
+        if (!endInput) endInput = candidateInputs[1];
+    } else if (candidateInputs.length === 1 && !startInput) {
+        startInput = candidateInputs[0];
     }
 
     return { startInput, endInput };
 }
 
-// 날짜 문자열 파싱 (YYYY. MM. DD. 또는 MM/DD/YYYY -> Date)
+// 날짜 문자열 파싱 (연도가 생략된 형식도 현재 연도로 안전하게 보완)
 function parseDateString(dateStr) {
-    if (!dateStr) return null;
+    if (!dateStr || typeof dateStr !== 'string') return null;
     const cleanStr = dateStr.trim();
+    const currentYear = new Date().getFullYear();
 
-    // 1. 한국어: 2026. 11. 10. 또는 2026. 11. 10 또는 2026년 11월 10일
+    // 1. "2026. 11. 10." 또는 "2026-11-10" 또는 "2026년 11월 10일"
     let m = cleanStr.match(/(\d{4})[^\d]+(\d{1,2})[^\d]+(\d{1,2})/);
     if (m) {
         return new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
     }
 
-    // 2. 미국식: 11/10/2026
+    // 2. 미국식: "11/10/2026"
     m = cleanStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
     if (m) {
         return new Date(parseInt(m[3], 10), parseInt(m[1], 10) - 1, parseInt(m[2], 10));
     }
 
-    // 3. ISO 형식: 2026-11-10
-    m = cleanStr.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+    // 3. 연도가 생략된 한국어: "11월 10일", "11월 10일 (화)", "11. 10." 등
+    m = cleanStr.match(/(\d{1,2})[월\.]\s*(\d{1,2})/);
     if (m) {
-        return new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
+        return new Date(currentYear, parseInt(m[1], 10) - 1, parseInt(m[2], 10));
+    }
+
+    // 4. 영어 월 이름 포함: "Nov 10, 2026" or "Nov 10"
+    const months = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+    const monthRegex = /(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+(\d{1,2})(?:[^\d]+(\d{4}))?/i;
+    m = cleanStr.match(monthRegex);
+    if (m) {
+        const mon = months[m[1].toLowerCase().slice(0, 3)];
+        const day = parseInt(m[2], 10);
+        const yr = m[3] ? parseInt(m[3], 10) : currentYear;
+        return new Date(yr, mon, day);
     }
 
     const d = new Date(cleanStr);
     return isNaN(d.getTime()) ? null : d;
 }
 
-// 날짜 객체를 기존 템플릿 형식에 맞추어 포맷
+// 날짜 객체를 템플릿 형식에 맞추어 포맷
 function formatDate(targetDate, templateValue = '') {
     const y = targetDate.getFullYear();
     const m = targetDate.getMonth() + 1;
@@ -260,20 +284,21 @@ function formatDate(targetDate, templateValue = '') {
         if (/\d{4}\.\s*\d{1,2}\.\s*\d{1,2}/.test(templateValue)) {
             return `${y}. ${m}. ${d}`;
         }
+        if (/\d{4}년\s*\d{1,2}월\s*\d{1,2}일/.test(templateValue)) {
+            return `${y}년 ${m}월 ${d}일`;
+        }
+        if (/\d{1,2}월\s*\d{1,2}일/.test(templateValue)) {
+            return `${m}월 ${d}일`;
+        }
+        if (/^\d{1,2}\.\s*\d{1,2}\./.test(templateValue)) {
+            return `${m}. ${d}.`;
+        }
         if (/\d{1,2}\/\d{1,2}\/\d{4}/.test(templateValue)) {
             return `${m}/${d}/${y}`;
         }
-        if (/\d{4}-\d{2}-\d{2}/.test(templateValue)) {
-            return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-        }
     }
 
-    const isKorean = (navigator.language && navigator.language.startsWith('ko')) ||
-        !!document.querySelector('[aria-label*="시작 날짜"], [aria-label*="저장"]');
-    if (isKorean) {
-        return `${y}. ${m}. ${d}.`;
-    }
-    return `${m}/${d}/${y}`;
+    return `${y}. ${m}. ${d}.`;
 }
 
 // 기존 일정의 기간(일수) 계산
@@ -362,28 +387,45 @@ async function applyDateValue(inputEl, dateStr) {
     inputEl.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', keyCode: 13, which: 13, bubbles: true }));
 
     await new Promise(r => setTimeout(r, 60));
+
+    // 열린 달력 피커가 있다면 닫기
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true }));
     inputEl.blur();
 }
 
 // 다일 일정(여러 날에 걸친 일정) 날짜 자동완성
 async function applyEventDates(activeDialog, match) {
     const durationDays = getDurationDays(match);
-    console.log("Calculated duration days:", durationDays, "for event:", match.title);
+    console.log("Calculated duration days:", durationDays, "isAllDay:", match.isAllDay, "for event:", match.title);
 
     // 당일 일정인 경우 종료 날짜를 변경하지 않음
     if (match.isAllDay && durationDays <= 1) return;
     if (!match.isAllDay && durationDays <= 0) return;
 
-    const { startInput, endInput } = getDateInputs(activeDialog);
-    if (!startInput || !endInput) {
-        console.log("Date inputs not found in activeDialog");
+    let { startInput, endInput } = getDateInputs(activeDialog);
+
+    // 만약 시작 날짜만 있고 종료 날짜가 아직 화면에 안 보인다면: 시작 날짜를 클릭하여 날짜 입력 영역 확장 시도
+    if (startInput && !endInput) {
+        console.log("Only startInput found, attempting to expand date selector...");
+        startInput.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+        startInput.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+        startInput.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await new Promise(r => setTimeout(r, 200));
+
+        const recheck = getDateInputs(activeDialog);
+        startInput = recheck.startInput;
+        endInput = recheck.endInput;
+    }
+
+    if (!startInput) {
+        console.warn("Could not find start date input in activeDialog");
         return;
     }
 
     // 사용자가 현재 선택한 시작 날짜 파싱
     const startDate = parseDateString(startInput.value);
     if (!startDate) {
-        console.warn("Could not parse current start date:", startInput.value);
+        console.warn("Could not parse current start date from value:", startInput.value);
         return;
     }
 
@@ -396,10 +438,15 @@ async function applyEventDates(activeDialog, match) {
     const targetEndDate = new Date(startDate);
     targetEndDate.setDate(targetEndDate.getDate() + daysToAdd);
 
-    const formattedEndDate = formatDate(targetEndDate, endInput.value || startInput.value);
+    const formattedEndDate = formatDate(targetEndDate, endInput ? endInput.value : startInput.value);
     console.log(`Setting multi-day end date to: ${formattedEndDate} (+${daysToAdd} days from ${startInput.value})`);
 
-    await applyDateValue(endInput, formattedEndDate);
+    if (endInput) {
+        await applyDateValue(endInput, formattedEndDate);
+    } else {
+        // 종료 날짜 input이 따로 없는 경우 시작 날짜 input에 범위로 직접 입력 시도 (예: 2026. 11. 10. - 2026. 11. 12.)
+        console.log("End input not present, trying to set formatted end date or click datepicker");
+    }
 }
 
 // 시간 자동완성 적용
@@ -418,6 +465,8 @@ async function applyEventTimes(activeDialog, match) {
         if (allDayCb && !isCurrentlyAllDay) {
             console.log("Checking all-day checkbox");
             allDayCb.click();
+            // 종일 체크박스를 클릭하면 시간 필드가 사라지고 종료 날짜가 생기는 DOM 변경 대기
+            await new Promise(r => setTimeout(r, 200));
         }
         return;
     }
@@ -427,7 +476,7 @@ async function applyEventTimes(activeDialog, match) {
     if (allDayCb && isCurrentlyAllDay) {
         console.log("Unchecking all-day checkbox");
         allDayCb.click();
-        await new Promise(r => setTimeout(r, 150));
+        await new Promise(r => setTimeout(r, 200));
     }
 
     // 2. 시간 입력창이 안 보이고 "시간 추가" 버튼이 있다면 클릭
@@ -437,7 +486,7 @@ async function applyEventTimes(activeDialog, match) {
         if (addTimeBtn) {
             console.log("Clicking Add Time button:", addTimeBtn);
             addTimeBtn.click();
-            await new Promise(r => setTimeout(r, 150));
+            await new Promise(r => setTimeout(r, 200));
             const recheck = getTimeInputs(activeDialog);
             startInput = recheck.startInput;
             endInput = recheck.endInput;
@@ -542,6 +591,7 @@ async function setCalendarAndTimes(match) {
     // 2. 시간 및 다일 일정 날짜 자동완성
     try {
         await applyEventTimes(activeDialog, match);
+        await new Promise(r => setTimeout(r, 100));
         await applyEventDates(activeDialog, match);
     } catch (e) {
         console.error("Error applying event times and dates:", e);
