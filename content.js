@@ -39,7 +39,7 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
 const suggestionBox = document.createElement('div');
 suggestionBox.id = 'gcal-history-suggestions';
 suggestionBox.style.display = 'none';
-suggestionBox.style.maxHeight = '220px'; // 약 5개 항목 높이
+suggestionBox.style.maxHeight = '240px'; // 약 5~6개 항목 높이
 suggestionBox.style.overflowY = 'auto';
 suggestionBox.style.backgroundColor = '#fff';
 suggestionBox.style.borderRadius = '4px';
@@ -180,13 +180,118 @@ function getTimeInputs(scope) {
     return { startInput, endInput };
 }
 
+// 시작 날짜 및 종료 날짜 input 탐색
+function getDateInputs(scope) {
+    let startInput = scope.querySelector('input[aria-label*="시작 날짜"], input[aria-label*="Start date"]');
+    let endInput = scope.querySelector('input[aria-label*="종료 날짜"], input[aria-label*="End date"]');
+
+    if (!startInput || !endInput) {
+        const dateRegex = /(\d{4}[^\d]+\d{1,2}[^\d]+\d{1,2}|\d{1,2}\/\d{1,2}\/\d{4})/;
+        const allInputs = Array.from(scope.querySelectorAll('input:not([type="hidden"]):not([type="checkbox"])'));
+        const dateInputs = allInputs.filter(inp => {
+            const aria = inp.getAttribute('aria-label') || '';
+            const val = inp.value || '';
+            return aria.includes('날짜') || aria.toLowerCase().includes('date') || dateRegex.test(val);
+        });
+
+        if (dateInputs.length >= 2) {
+            if (!startInput) startInput = dateInputs[0];
+            if (!endInput) endInput = dateInputs[1];
+        } else if (dateInputs.length === 1 && !startInput) {
+            startInput = dateInputs[0];
+        }
+    }
+
+    return { startInput, endInput };
+}
+
+// 날짜 문자열 파싱 (YYYY. MM. DD. 또는 MM/DD/YYYY -> Date)
+function parseDateString(dateStr) {
+    if (!dateStr) return null;
+    const cleanStr = dateStr.trim();
+
+    // 1. 한국어: 2026. 11. 10. 또는 2026. 11. 10 또는 2026년 11월 10일
+    let m = cleanStr.match(/(\d{4})[^\d]+(\d{1,2})[^\d]+(\d{1,2})/);
+    if (m) {
+        return new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
+    }
+
+    // 2. 미국식: 11/10/2026
+    m = cleanStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (m) {
+        return new Date(parseInt(m[3], 10), parseInt(m[1], 10) - 1, parseInt(m[2], 10));
+    }
+
+    // 3. ISO 형식: 2026-11-10
+    m = cleanStr.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (m) {
+        return new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
+    }
+
+    const d = new Date(cleanStr);
+    return isNaN(d.getTime()) ? null : d;
+}
+
+// 날짜 객체를 기존 템플릿 형식에 맞추어 포맷
+function formatDate(targetDate, templateValue = '') {
+    const y = targetDate.getFullYear();
+    const m = targetDate.getMonth() + 1;
+    const d = targetDate.getDate();
+
+    if (templateValue) {
+        if (/\d{4}\.\s*\d{1,2}\.\s*\d{1,2}\./.test(templateValue)) {
+            return `${y}. ${m}. ${d}.`;
+        }
+        if (/\d{4}\.\s*\d{1,2}\.\s*\d{1,2}/.test(templateValue)) {
+            return `${y}. ${m}. ${d}`;
+        }
+        if (/\d{1,2}\/\d{1,2}\/\d{4}/.test(templateValue)) {
+            return `${m}/${d}/${y}`;
+        }
+        if (/\d{4}-\d{2}-\d{2}/.test(templateValue)) {
+            return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        }
+    }
+
+    const isKorean = (navigator.language && navigator.language.startsWith('ko')) ||
+        !!document.querySelector('[aria-label*="시작 날짜"], [aria-label*="저장"]');
+    if (isKorean) {
+        return `${y}. ${m}. ${d}.`;
+    }
+    return `${m}/${d}/${y}`;
+}
+
+// 기존 일정의 기간(일수) 계산
+function getDurationDays(match) {
+    if (!match.startTime || !match.endTime) return 0;
+
+    if (match.isAllDay) {
+        // 종일 일정: API의 end.date는 exclusive (예: 5/1~5/3 3일간 일정은 start: 2025-05-01, end: 2025-05-04)
+        const sStr = match.startTime.includes('T') ? match.startTime.split('T')[0] : match.startTime;
+        const eStr = match.endTime.includes('T') ? match.endTime.split('T')[0] : match.endTime;
+        const s = new Date(sStr);
+        const e = new Date(eStr);
+        const diffMs = e.getTime() - s.getTime();
+        const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+        return Math.max(diffDays, 1);
+    } else {
+        // 시간 지정 일정: 시작일자와 종료일자 사이의 날짜 차이
+        const sStr = match.startTime.split('T')[0];
+        const eStr = match.endTime.split('T')[0];
+        if (sStr === eStr) return 0; // 당일 일정
+        const s = new Date(sStr);
+        const e = new Date(eStr);
+        const diffDays = Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24));
+        return Math.max(diffDays, 0);
+    }
+}
+
 // 시간 input 값 설정 및 확정
 async function applyTimeValue(inputEl, timeStr) {
     if (!inputEl || !timeStr) return;
 
     inputEl.focus();
 
-    // React의 기본 setter 우회
     const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
     if (nativeInputValueSetter) {
         nativeInputValueSetter.call(inputEl, timeStr);
@@ -197,7 +302,6 @@ async function applyTimeValue(inputEl, timeStr) {
     inputEl.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
     inputEl.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
 
-    // 드롭다운 메뉴가 열려 있다면 일치하는 시간 항목 클릭 시도
     await new Promise(r => setTimeout(r, 60));
     const openMenus = Array.from(document.querySelectorAll('[role="listbox"], [role="menu"]')).filter(m => m.offsetParent !== null && !m.closest('[data-view-family]'));
     let clicked = false;
@@ -215,13 +319,72 @@ async function applyTimeValue(inputEl, timeStr) {
     }
 
     if (!clicked) {
-        // 엔터 키로 확정
         inputEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, which: 13, bubbles: true }));
         inputEl.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', keyCode: 13, which: 13, bubbles: true }));
     }
 
     await new Promise(r => setTimeout(r, 60));
     inputEl.blur();
+}
+
+// 날짜 input 값 설정 및 확정
+async function applyDateValue(inputEl, dateStr) {
+    if (!inputEl || !dateStr) return;
+
+    inputEl.focus();
+
+    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+    if (nativeInputValueSetter) {
+        nativeInputValueSetter.call(inputEl, dateStr);
+    } else {
+        inputEl.value = dateStr;
+    }
+
+    inputEl.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+    inputEl.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+
+    inputEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+    inputEl.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+
+    await new Promise(r => setTimeout(r, 60));
+    inputEl.blur();
+}
+
+// 다일 일정(여러 날에 걸친 일정) 날짜 자동완성
+async function applyEventDates(activeDialog, match) {
+    const durationDays = getDurationDays(match);
+    console.log("Calculated duration days:", durationDays, "for event:", match.title);
+
+    // 당일 일정인 경우 종료 날짜를 변경하지 않음
+    if (match.isAllDay && durationDays <= 1) return;
+    if (!match.isAllDay && durationDays <= 0) return;
+
+    const { startInput, endInput } = getDateInputs(activeDialog);
+    if (!startInput || !endInput) {
+        console.log("Date inputs not found in activeDialog");
+        return;
+    }
+
+    // 사용자가 현재 선택한 시작 날짜 파싱
+    const startDate = parseDateString(startInput.value);
+    if (!startDate) {
+        console.warn("Could not parse current start date:", startInput.value);
+        return;
+    }
+
+    // 새 종료 날짜 계산
+    // 종일 일정: 화면 UI 종료 날짜는 마지막 날(inclusive)이므로 startDate + (durationDays - 1)
+    // 시간 지정 일정: startDate + durationDays
+    const daysToAdd = match.isAllDay ? (durationDays - 1) : durationDays;
+    if (daysToAdd <= 0) return;
+
+    const targetEndDate = new Date(startDate);
+    targetEndDate.setDate(targetEndDate.getDate() + daysToAdd);
+
+    const formattedEndDate = formatDate(targetEndDate, endInput.value || startInput.value);
+    console.log(`Setting multi-day end date to: ${formattedEndDate} (+${daysToAdd} days from ${startInput.value})`);
+
+    await applyDateValue(endInput, formattedEndDate);
 }
 
 // 시간 자동완성 적용
@@ -288,7 +451,7 @@ async function applyEventTimes(activeDialog, match) {
     }
 }
 
-// 캘린더 및 시간 자동완성 메인 함수
+// 캘린더 및 시간/날짜 자동완성 메인 함수
 async function setCalendarAndTimes(match) {
     const activeDialog = getActiveDialog();
 
@@ -361,11 +524,12 @@ async function setCalendarAndTimes(match) {
         }
     }
 
-    // 2. 시간 자동완성
+    // 2. 시간 및 다일 일정 날짜 자동완성
     try {
         await applyEventTimes(activeDialog, match);
+        await applyEventDates(activeDialog, match);
     } catch (e) {
-        console.error("Error applying event times:", e);
+        console.error("Error applying event times and dates:", e);
     }
 }
 
@@ -429,17 +593,12 @@ let observerAnimationFrame = null;
 
 function scanAndAttachListeners() {
     const activeDialog = getActiveDialog();
-    // 모달이나 일정 생성 뷰가 열리지 않은 상태(document 전체일 때)에서 입력창이 없다면 스캔 스킵
     const inputs = getInputs();
 
     if (inputs.title && !inputs.title.dataset.acType) attachAutocomplete(inputs.title, 'titles');
     if (inputs.location && !inputs.location.dataset.acType) attachAutocomplete(inputs.location, 'locations');
     if (inputs.desc && !inputs.desc.dataset.acType) attachAutocomplete(inputs.desc, 'descriptions');
 
-    // 저장 버튼 감지:
-    // 전체 문서가 아니라 '현재 열린 모달/다이얼로그' 내부에서만 버튼을 탐색합니다.
-    // 이렇게 하면 캘린더 그리드에 표시된 수백~수천 개의 일정 칩(div[role="button"])을 전혀 스캔하지 않으므로
-    // 일정이 아무리 많아도 CPU 소모 0ms로 렉이 전혀 발생하지 않습니다.
     const searchScope = (activeDialog && activeDialog !== document) ? activeDialog : document.querySelector('[role="dialog"], [data-is-view="true"]');
     if (searchScope) {
         const buttons = searchScope.querySelectorAll('button, div[role="button"], span[role="button"]');
@@ -491,7 +650,6 @@ function attachAutocomplete(element, type) {
     let selectedIndex = -1;
 
     element.addEventListener('focus', () => {
-        // 입력창을 포커스할 때 백그라운드의 최신 캐시를 불러옵니다.
         loadCalendarEvents();
     });
 
@@ -509,7 +667,7 @@ function attachAutocomplete(element, type) {
             }
 
             let matches = [];
-            const keyword = val.toLowerCase();
+            const keyword = val.trim().toLowerCase();
 
             if (type === 'titles') {
                 matches = historyData.items.filter(item => item.title && item.title.toLowerCase().includes(keyword));
@@ -538,7 +696,6 @@ function attachAutocomplete(element, type) {
         if (!box || box.style.display === 'none') {
             if (e.key === 'Enter' && element.tagName === 'INPUT') {
                 closeSuggestions();
-                // 자동완성 창이 닫혀있을 때 제목 입력창에서 엔터를 누르면 빠른 일정 저장 트리거
                 handleEventSaved();
             }
             return;
@@ -626,7 +783,7 @@ function showSuggestions(matches, inputElement, type) {
 
     suggestionBox.style.left = rect.left + 'px';
     suggestionBox.style.top = (rect.bottom + window.scrollY) + 'px';
-    suggestionBox.style.width = Math.max(rect.width, 380) + 'px';
+    suggestionBox.style.width = Math.max(rect.width, 390) + 'px';
     suggestionBox.style.display = 'block';
 
     function escapeHTML(str) {
@@ -669,14 +826,21 @@ function showSuggestions(matches, inputElement, type) {
                 displayText += ` <span style="color:#70757a; font-size:0.9em;">📍 ${escapeHTML(match.location)}</span>`;
             }
             if (match.isAllDay) {
-                displayText += ` <span style="color:#1a73e8; font-size:0.85em; margin-left:4px;">📅 종일</span>`;
+                const duration = getDurationDays(match);
+                if (duration > 1) {
+                    displayText += ` <span style="color:#1a73e8; font-size:0.85em; margin-left:4px;">📅 ${duration}일간 (종일)</span>`;
+                } else {
+                    displayText += ` <span style="color:#1a73e8; font-size:0.85em; margin-left:4px;">📅 종일</span>`;
+                }
             } else if (match.startTime) {
+                const duration = getDurationDays(match);
                 const sObj = extractTime(match.startTime);
                 const eObj = extractTime(match.endTime);
                 if (sObj) {
                     const sStr = formatTime(sObj.hours, sObj.minutes);
                     const eStr = eObj ? ` ~ ${formatTime(eObj.hours, eObj.minutes)}` : '';
-                    displayText += ` <span style="color:#1a73e8; font-size:0.85em; margin-left:4px;">⏰ ${sStr}${eStr}</span>`;
+                    const durStr = duration > 0 ? ` (${duration + 1}일간)` : '';
+                    displayText += ` <span style="color:#1a73e8; font-size:0.85em; margin-left:4px;">⏰ ${sStr}${eStr}${durStr}</span>`;
                 }
             }
         } else {
@@ -697,7 +861,7 @@ function showSuggestions(matches, inputElement, type) {
                 if (match.location && inputs.location) setVal(inputs.location, match.location);
                 if (match.description && inputs.desc) setVal(inputs.desc, match.description);
 
-                // 선택한 일정명에 맞게 캘린더와 시간 설정
+                // 선택한 일정명에 맞게 캘린더, 시간 및 기간(다일 일정) 설정
                 setCalendarAndTimes(match).then(() => {
                     setVal(inputElement, match.title);
                     inputElement.focus();

@@ -81,7 +81,7 @@ async function fetchCalendarEvents(interactive = true) {
             const timeMinStr = timeMin.toISOString();
             console.log(`Fetching events for past ${fetchRangeMonths} months (timeMin: ${timeMinStr})`);
 
-            // 2. 모든 캘린더에서 일정 가져오기 (병렬 처리)
+            // 2. 모든 캘린더에서 일정 가져오기 (병렬 처리 + 페이지네이션 지원)
             console.log("Fetching events from all calendars...");
             let completedCalendars = 0;
             const totalCalendars = calendars.length;
@@ -100,24 +100,35 @@ async function fetchCalendarEvents(interactive = true) {
 
             const eventPromises = calendars.map(async (calendar) => {
                 const calendarId = encodeURIComponent(calendar.id);
-                // 캘린더당 최대 500개로 제한하여 성능 확보
-                const url = `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events?timeMin=${timeMinStr}&maxResults=500&singleEvents=true&orderBy=startTime`;
+                let allCalendarItems = [];
+                let pageToken = null;
+                let pageCount = 0;
 
                 try {
-                    const response = await fetch(url, {
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    });
-                    if (!response.ok) {
-                        console.warn(`Failed to fetch events for calendar ${calendar.summary}: ${response.status}`);
-                        completedCalendars++;
-                        reportProgress();
-                        return [];
-                    }
-                    const data = await response.json();
-                    const items = data.items || [];
+                    // 페이지네이션을 통해 500개 이상 등록된 일정이나 과거 일정도 누락 없이 수집 (최대 2,500개)
+                    do {
+                        let url = `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events?timeMin=${timeMinStr}&maxResults=250&singleEvents=true&orderBy=startTime`;
+                        if (pageToken) {
+                            url += `&pageToken=${encodeURIComponent(pageToken)}`;
+                        }
+
+                        const response = await fetch(url, {
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        });
+                        if (!response.ok) {
+                            console.warn(`Failed to fetch events for calendar ${calendar.summary}: ${response.status}`);
+                            break;
+                        }
+                        const data = await response.json();
+                        const items = data.items || [];
+                        allCalendarItems = allCalendarItems.concat(items);
+                        pageToken = data.nextPageToken;
+                        pageCount++;
+                    } while (pageToken && pageCount < 10);
+
                     completedCalendars++;
                     reportProgress();
-                    return items.map(event => ({
+                    return allCalendarItems.map(event => ({
                         ...event,
                         _calendarSummary: calendar.summary,
                         _calendarId: calendar.id
@@ -150,7 +161,7 @@ async function fetchCalendarEvents(interactive = true) {
             // 역순으로 정렬하여 최근 일정이 먼저 오도록
             for (let i = allEvents.length - 1; i >= 0; i--) {
                 const event = allEvents[i];
-                if (event.status === 'cancelled') continue; // 취소된 일정 제외
+                if (event.status === 'cancelled') continue; // 삭제/취소된 일정 제외
 
                 const title = event.summary || '';
                 const location = event.location || '';
