@@ -5,11 +5,12 @@
     <meta charset="UTF-8">
     <style>
         body {
-            width: 300px;
-            padding: 15px;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            width: 290px;
+            padding: 16px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             margin: 0;
             background-color: #ffffff;
+            color: #3c4043;
         }
 
         .container {
@@ -18,39 +19,113 @@
             gap: 12px;
         }
 
+        .header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #f1f3f4;
+            padding-bottom: 8px;
+        }
+
         h2 {
-            font-size: 18px;
+            font-size: 16px;
             margin: 0;
             color: #1a73e8;
-            border-bottom: 2px solid #f1f3f4;
-            padding-bottom: 10px;
+            font-weight: 600;
+        }
+
+        .icon-btn {
+            background: none;
+            border: 1px solid #dadce0;
+            border-radius: 50%;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 14px;
+            color: #5f6368;
+            transition: all 0.2s ease;
+            padding: 0;
+        }
+
+        .icon-btn:hover {
+            background-color: #f1f3f4;
+            color: #1a73e8;
+            border-color: #1a73e8;
+            transform: rotate(45deg);
+        }
+
+        .icon-btn:active {
+            transform: rotate(180deg);
+        }
+
+        .icon-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .setting-box {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            background-color: #f8f9fa;
+            padding: 10px 12px;
+            border-radius: 8px;
+            border: 1px solid #e8eaed;
+        }
+
+        .setting-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #3c4043;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        select {
+            width: 100%;
+            padding: 8px 10px;
+            border-radius: 6px;
+            border: 1px solid #dadce0;
+            background-color: #ffffff;
+            font-size: 13px;
+            color: #202124;
+            outline: none;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+
+        select:focus {
+            border-color: #1a73e8;
+            box-shadow: 0 0 0 1px #1a73e8;
         }
 
         .status-container {
-            font-size: 13px;
-            padding: 12px;
+            font-size: 12px;
+            padding: 10px 12px;
             background-color: #f8f9fa;
             border-radius: 8px;
-            border: 1px solid #dadce0;
+            border: 1px solid #e8eaed;
         }
 
         .status-message {
-            margin-bottom: 8px;
             line-height: 1.4;
-            color: #3c4043;
+            color: #5f6368;
         }
 
         #progress-container {
-            margin-top: 10px;
+            margin-top: 8px;
         }
 
         .progress-track {
             background: #e8eaed;
             border-radius: 10px;
-            height: 10px;
+            height: 8px;
             width: 100%;
             overflow: hidden;
-            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
         }
 
         #progress-bar {
@@ -63,56 +138,44 @@
         #progress-text {
             font-size: 11px;
             color: #70757a;
-            margin-top: 6px;
+            margin-top: 4px;
             text-align: right;
             font-weight: 500;
         }
 
-        button {
-            width: 100%;
-            padding: 12px;
-            background-color: #1a73e8;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: 600;
-            font-size: 14px;
-            transition: background-color 0.2s, transform 0.1s;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-        }
-
-        button:hover {
-            background-color: #1765cc;
-        }
-
-        button:active {
-            transform: translateY(1px);
-        }
-
-        button:disabled {
-            background-color: #dadce0;
-            color: #70757a;
-            cursor: not-allowed;
-            box-shadow: none;
-        }
-
         .hint {
             font-size: 11px;
-            color: #5f6368;
+            color: #70757a;
             margin: 0;
-            line-height: 1.5;
-            padding: 5px;
-            background: #fff8e1;
-            border-radius: 4px;
-            border-left: 3px solid #fbc02d;
+            line-height: 1.4;
+            padding: 6px 8px;
+            background: #e8f0fe;
+            border-radius: 6px;
+            border-left: 3px solid #1a73e8;
         }
     </style>
 </head>
 
 <body>
     <div class="container">
-        <h2>G-Cal History</h2>
+        <div class="header-row">
+            <h2>G-Cal History</h2>
+            <button id="refreshBtn" title="일정 수동 새로고침" class="icon-btn">🔄</button>
+        </div>
+
+        <div class="setting-box">
+            <div class="setting-label">
+                <span>과거 일정 조회 기간</span>
+            </div>
+            <select id="rangeSelect">
+                <option value="1">최근 1개월</option>
+                <option value="3">최근 3개월</option>
+                <option value="6">최근 6개월</option>
+                <option value="12" selected>최근 1년 (기본값)</option>
+                <option value="24">최근 2년</option>
+                <option value="36">최근 3년</option>
+            </select>
+        </div>
 
         <div class="status-container">
             <div id="status" class="status-message">데이터 상태를 확인 중입니다...</div>
@@ -125,10 +188,8 @@
             </div>
         </div>
 
-        <button id="refreshBtn">일정 강제 새로고침</button>
-
         <p class="hint">
-            * 팝업이 뜨면 구글 계정으로 로그인해 주세요.
+            💡 일정을 등록하거나 조회 기간을 변경하면 백그라운드에서 자동으로 새로고침됩니다.
         </p>
     </div>
     <script src="popup.js"></script>
