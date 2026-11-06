@@ -6,34 +6,49 @@ let historyData = {
 // 백그라운드 스크립트에서 자동완성할 일정 데이터 가져오기
 function loadCalendarEvents() {
     return new Promise((resolve) => {
-        chrome.runtime.sendMessage({ action: 'getEvents' }, function (response) {
-            if (chrome.runtime.lastError) {
-                console.error("Error communicating with background script:", chrome.runtime.lastError.message);
-                resolve(false);
-                return;
-            }
+        // 확장 프로그램이 새로고침되어 컨텍스트가 끊긴 경우 안전하게 리턴
+        if (!chrome.runtime?.id) {
+            resolve(false);
+            return;
+        }
 
-            if (response && response.success && response.items) {
-                console.log("Successfully loaded calendar events:", response.items.length);
-                historyData.items = response.items;
-                resolve(true);
-            } else {
-                console.error("Failed to load events:", response?.error || "Unknown error");
-                resolve(false);
-            }
-        });
+        try {
+            chrome.runtime.sendMessage({ action: 'getEvents' }, function (response) {
+                if (chrome.runtime.lastError) {
+                    console.warn("Communication with background script:", chrome.runtime.lastError.message);
+                    resolve(false);
+                    return;
+                }
+
+                if (response && response.success && response.items) {
+                    console.log("Successfully loaded calendar events:", response.items.length);
+                    historyData.items = response.items;
+                    resolve(true);
+                } else {
+                    console.error("Failed to load events:", response?.error || "Unknown error");
+                    resolve(false);
+                }
+            });
+        } catch (err) {
+            // Extension context invalidated 에러 방어
+            resolve(false);
+        }
     });
 }
 
 // 초기 데이터 로딩
 loadCalendarEvents();
 
-chrome.storage.onChanged.addListener((changes, namespace) => {
-    if (namespace === 'local' && changes.cachedEvents && changes.cachedEvents.newValue) {
-        console.log("Updated events from storage change:", changes.cachedEvents.newValue.length);
-        historyData.items = changes.cachedEvents.newValue;
+try {
+    if (chrome.storage?.onChanged) {
+        chrome.storage.onChanged.addListener((changes, namespace) => {
+            if (namespace === 'local' && changes.cachedEvents && changes.cachedEvents.newValue) {
+                console.log("Updated events from storage change:", changes.cachedEvents.newValue.length);
+                historyData.items = changes.cachedEvents.newValue;
+            }
+        });
     }
-});
+} catch (e) { }
 
 // 자동완성 목록 UI 생성
 const suggestionBox = document.createElement('div');
@@ -566,25 +581,30 @@ function handleEventSaved() {
         historyData.items.unshift(newItem);
 
         // chrome.storage에도 즉시 반영
-        chrome.storage.local.get(['cachedEvents'], (result) => {
-            const current = result.cachedEvents || [];
-            const key = `${newItem.title}|${newItem.location}`;
-            const filtered = current.filter(item => `${item.title}|${item.location}` !== key);
-            chrome.storage.local.set({ cachedEvents: [newItem, ...filtered] });
-        });
+        try {
+            chrome.storage.local.get(['cachedEvents'], (result) => {
+                const current = result.cachedEvents || [];
+                const key = `${newItem.title}|${newItem.location}`;
+                const filtered = current.filter(item => `${item.title}|${item.location}` !== key);
+                chrome.storage.local.set({ cachedEvents: [newItem, ...filtered] });
+            });
+        } catch (e) { }
     }
 
     // 2. 구글 서버에 저장된 후 "일정 강제 새로고침" 실행
     if (saveRefreshTimer) clearTimeout(saveRefreshTimer);
     saveRefreshTimer = setTimeout(() => {
-        console.log("Triggering forceRefresh after event save...");
-        chrome.runtime.sendMessage({ action: 'forceRefresh' }, (res) => {
-            if (chrome.runtime.lastError) {
-                console.warn("forceRefresh message error:", chrome.runtime.lastError.message);
-            } else {
-                console.log("forceRefresh successfully completed after save:", res?.success);
-            }
-        });
+        if (!chrome.runtime?.id) return;
+        try {
+            console.log("Triggering forceRefresh after event save...");
+            chrome.runtime.sendMessage({ action: 'forceRefresh' }, (res) => {
+                if (chrome.runtime.lastError) {
+                    console.warn("forceRefresh message error:", chrome.runtime.lastError.message);
+                } else {
+                    console.log("forceRefresh successfully completed after save:", res?.success);
+                }
+            });
+        } catch (e) { }
     }, 1500);
 }
 
