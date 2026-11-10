@@ -1320,8 +1320,31 @@ document.addEventListener('keydown', (e) => {
     }
 }, { capture: true });
 
-// 창 크기 변경 및 스크롤 시 자동완성 드롭다운 닫기
-window.addEventListener('scroll', closeSuggestions, true);
+// 창 크기 변경 및 외부 스크롤 시 자동완성 드롭다운 닫기 (자동완성 목록 자체의 내부 스크롤은 무시)
+let isInteractingWithSuggestions = false;
+let activeAutocompleteInput = null;
+
+suggestionBox.addEventListener('mousedown', () => {
+    isInteractingWithSuggestions = true;
+});
+
+window.addEventListener('mouseup', () => {
+    if (isInteractingWithSuggestions) {
+        setTimeout(() => {
+            isInteractingWithSuggestions = false;
+            if (suggestionBox.style.display !== 'none' && activeAutocompleteInput && document.activeElement !== activeAutocompleteInput) {
+                activeAutocompleteInput.focus();
+            }
+        }, 50);
+    }
+});
+
+window.addEventListener('scroll', (e) => {
+    if (e && (e.target === suggestionBox || (e.target instanceof Node && suggestionBox.contains(e.target)))) {
+        return;
+    }
+    closeSuggestions();
+}, true);
 window.addEventListener('resize', closeSuggestions, true);
 
 function attachAutocomplete(element, type) {
@@ -1332,11 +1355,13 @@ function attachAutocomplete(element, type) {
     let selectedIndex = -1;
 
     element.addEventListener('focus', () => {
+        activeAutocompleteInput = element;
         loadCalendarEvents();
     });
 
     element.addEventListener(eventType, (e) => {
         if (e.isTrusted) {
+            activeAutocompleteInput = element;
             if (historyData.items.length === 0) {
                 loadCalendarEvents();
             }
@@ -1369,7 +1394,10 @@ function attachAutocomplete(element, type) {
     });
 
     element.addEventListener('blur', () => {
-        setTimeout(closeSuggestions, 200);
+        setTimeout(() => {
+            if (isInteractingWithSuggestions) return;
+            closeSuggestions();
+        }, 200);
     });
 
     element.addEventListener('keydown', (e) => {
@@ -1422,7 +1450,7 @@ function highlightItem(items, index) {
         const isSelected = (i === index);
         item.style.backgroundColor = isSelected ? '#e8eaed' : '';
         if (isSelected) {
-            item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            item.scrollIntoView({ block: 'nearest' });
         }
     });
 }
@@ -1604,10 +1632,16 @@ function showSuggestions(matches, inputElement, type) {
         textSpan.innerHTML = displayText;
         div.appendChild(textSpan);
 
+        // 항목 클릭 시 입력창의 불필요한 blur 방지
+        div.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+        });
+
         div.addEventListener('click', async (e) => {
             e.preventDefault();
             e.stopPropagation();
 
+            isInteractingWithSuggestions = false;
             closeSuggestions();
             console.log("Selected match for autocomplete:", match);
 
