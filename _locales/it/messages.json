@@ -1,0 +1,70 @@
+{
+  "extName": {
+    "message": "G-Cal History (Completamento automatico Google Calendar)",
+    "description": "Extension name"
+  },
+  "extDescription": {
+    "message": "Ricorda i titoli e i dettagli degli eventi passati di Google Calendar per suggerirli e compilarli automaticamente.",
+    "description": "Extension description"
+  },
+  "refreshTooltip": {
+    "message": "Aggiorna eventi",
+    "description": "Tooltip for refresh button"
+  },
+  "rangeLabel": {
+    "message": "Intervallo di ricerca eventi passati",
+    "description": "Label for past event lookup range"
+  },
+  "range1": {
+    "message": "Ultimo mese",
+    "description": "1 month option"
+  },
+  "range3": {
+    "message": "Ultimi 3 mesi",
+    "description": "3 months option"
+  },
+  "range6": {
+    "message": "Ultimi 6 mesi",
+    "description": "6 months option"
+  },
+  "range12": {
+    "message": "Ultimo anno (Predefinito)",
+    "description": "1 year default option"
+  },
+  "range24": {
+    "message": "Ultimi 2 anni",
+    "description": "2 years option"
+  },
+  "range36": {
+    "message": "Ultimi 3 anni",
+    "description": "3 years option"
+  },
+  "optionsLabel": {
+    "message": "Opzioni di completamento automatico",
+    "description": "Label for autocomplete options"
+  },
+  "optTime": {
+    "message": "Durata e orario",
+    "description": "Option for time and duration"
+  },
+  "optAttendees": {
+    "message": "Invitati",
+    "description": "Option for attendees"
+  },
+  "optLocation": {
+    "message": "Luogo",
+    "description": "Option for location"
+  },
+  "optDescription": {
+    "message": "Descrizione",
+    "description": "Option for description"
+  },
+  "statusChecking": {
+    "message": "Verifica dello stato dei dati in corso...",
+    "description": "Status checking message"
+  },
+  "hintText": {
+    "message": "💡 Le modifiche vengono sincronizzate in tempo reale quando crei eventi o aggiorni le impostazioni.",
+    "description": "Footer hint message"
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "extName": {
+    "message": "G-Cal History (Saisie automatique Google Agenda)",
+    "description": "Extension name"
+  },
+  "extDescription": {
+    "message": "Mémorise les titres et détails des événements passés de Google Agenda pour les suggérer et les remplir automatiquement.",
+    "description": "Extension description"
+  },
+  "refreshTooltip": {
+    "message": "Actualiser les événements",
+    "description": "Tooltip for refresh button"
+  },
+  "rangeLabel": {
+    "message": "Période de recherche des événements passés",
+    "description": "Label for past event lookup range"
+  },
+  "range1": {
+    "message": "Le dernier mois",
+    "description": "1 month option"
+  },
+  "range3": {
+    "message": "Les 3 derniers mois",
+    "description": "3 months option"
+  },
+  "range6": {
+    "message": "Les 6 derniers mois",
+    "description": "6 months option"
+  },
+  "range12": {
+    "message": "La dernière année (Par défaut)",
+    "description": "1 year default option"
+  },
+  "range24": {
+    "message": "Les 2 dernières années",
+    "description": "2 years option"
+  },
+  "range36": {
+    "message": "Les 3 dernières années",
+    "description": "3 years option"
+  },
+  "optionsLabel": {
+    "message": "Options de saisie automatique",
+    "description": "Label for autocomplete options"
+  },
+  "optTime": {
+    "message": "Durée et horaire",
+    "description": "Option for time and duration"
+  },
+  "optAttendees": {
+    "message": "Invités",
+    "description": "Option for attendees"
+  },
+  "optLocation": {
+    "message": "Lieu",
+    "description": "Option for location"
+  },
+  "optDescription": {
+    "message": "Description",
+    "description": "Option for description"
+  },
+  "statusChecking": {
+    "message": "Vérification de l'état des données...",
+    "description": "Status checking message"
+  },
+  "hintText": {
+    "message": "💡 Les modifications sont synchronisées en temps réel lorsque vous créez des événements ou modifiez les paramètres.",
+    "description": "Footer hint message"
+  }
+}

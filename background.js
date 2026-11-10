@@ -20,7 +20,8 @@ function sanitizeDescription(raw) {
         .replace(/&gt;/gi, '>')
         .replace(/&quot;/gi, '"')
         .replace(/&#39;/gi, "'")
-        .trim();
+        .trim()
+        .slice(0, 5000);
 }
 
 let currentFetchPromise = null;
@@ -38,18 +39,23 @@ async function fetchCalendarEvents(interactive = true) {
 
             let token = await getStoredToken();
 
-            if (!token && interactive) {
-                token = await authenticateUser();
+            if (!token) {
+                token = await authenticateUser(interactive).catch(() => null);
             }
 
             if (!token) {
+                if (!interactive) {
+                    console.log("Silent refresh skipped: no valid access token available.");
+                    return [];
+                }
                 throw new Error("No access token available.");
             }
 
             console.log("Token obtained", token ? "Yes" : "No");
 
-            // 0. (디버깅) 현재 계정 정보 가져오기
+            // 0. (디버깅) 현재 계정 정보 가져오기 및 토큰 만료(401) 사전 검증
             let userEmail = "Unknown";
+            let tokenExpired = false;
             try {
                 const userInfoRes = await fetch('https://www.googleapis.com/oauth2/v1/userinfo', {
                     headers: { 'Authorization': `Bearer ${token}` }
@@ -59,14 +65,24 @@ async function fetchCalendarEvents(interactive = true) {
                     userEmail = userInfo.email;
                     console.log("Current Auth Account:", userEmail);
                 } else if (userInfoRes.status === 401) {
-                    console.log("Token expired, re-authenticating...");
-                    if (interactive) {
-                        token = await authenticateUser();
-                    } else {
-                        throw new Error("Token expired and interactive authentication is disabled.");
-                    }
+                    tokenExpired = true;
                 }
-            } catch (e) { console.error("Failed to fetch userinfo", e); }
+            } catch (e) {
+                console.log("Could not fetch userinfo:", e.message || e);
+            }
+
+            if (tokenExpired) {
+                console.log("Token expired (401), attempting re-authentication...");
+                await chrome.storage.local.remove(['access_token']);
+                token = await authenticateUser(interactive).catch(() => null);
+                if (!token) {
+                    if (!interactive) {
+                        console.log("Silent refresh skipped: token expired and silent re-auth unavailable.");
+                        return [];
+                    }
+                    throw new Error("Token expired and re-authentication failed.");
+                }
+            }
 
             // 1. 사용자의 캘린더 목록 가져오기
             const calendarListUrl = 'https://www.googleapis.com/calendar/v3/users/me/calendarList';
@@ -75,14 +91,22 @@ async function fetchCalendarEvents(interactive = true) {
             });
 
             if (!calendarListResponse.ok) {
-                console.error("Calendar List Error Status:", calendarListResponse.status);
-                if (calendarListResponse.status === 401 && interactive) {
-                    token = await authenticateUser();
-                    calendarListResponse = await fetch(calendarListUrl, {
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    });
+                if (calendarListResponse.status === 401) {
+                    await chrome.storage.local.remove(['access_token']);
+                    token = await authenticateUser(interactive).catch(() => null);
+                    if (token) {
+                        calendarListResponse = await fetch(calendarListUrl, {
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        });
+                    } else if (!interactive) {
+                        console.log("Silent refresh skipped at calendarList: token expired.");
+                        return [];
+                    }
                 }
                 if (!calendarListResponse.ok) {
+                    if (interactive) {
+                        console.error("Calendar List Error Status:", calendarListResponse.status);
+                    }
                     throw new Error(`Calendar List API request failed: ${calendarListResponse.status}`);
                 }
             }
@@ -117,6 +141,9 @@ async function fetchCalendarEvents(interactive = true) {
 
             reportProgress();
 
+            const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Seoul';
+            console.log(`Local TimeZone detected: ${localTimeZone}`);
+
             const eventPromises = calendars.map(async (calendar) => {
                 const calendarId = encodeURIComponent(calendar.id);
                 let allCalendarItems = [];
@@ -125,7 +152,7 @@ async function fetchCalendarEvents(interactive = true) {
 
                 try {
                     do {
-                        let url = `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events?timeMin=${timeMinStr}&maxResults=250&singleEvents=true&orderBy=startTime`;
+                        let url = `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events?timeMin=${timeMinStr}&timeZone=${encodeURIComponent(localTimeZone)}&maxResults=250&singleEvents=true&orderBy=startTime`;
                         if (pageToken) {
                             url += `&pageToken=${encodeURIComponent(pageToken)}`;
                         }
@@ -231,7 +258,11 @@ async function fetchCalendarEvents(interactive = true) {
             return items;
 
         } catch (error) {
-            console.error("Error fetching calendar events:", error);
+            if (interactive) {
+                console.error("Error fetching calendar events:", error);
+            } else {
+                console.log("Silent refresh skipped:", error.message || error);
+            }
             throw error;
         } finally {
             currentFetchPromise = null;
@@ -246,20 +277,27 @@ async function getStoredToken() {
     return result.access_token;
 }
 
-async function authenticateUser() {
+async function authenticateUser(interactive = true) {
     const redirectUri = chrome.identity.getRedirectURL();
-    const authUrl = `https://accounts.google.com/o/oauth2/auth?client_id=${CLIENT_ID}&response_type=token&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(SCOPES.join(' '))}`;
+    const promptParam = interactive ? '' : '&prompt=none';
+    const authUrl = `https://accounts.google.com/o/oauth2/auth?client_id=${CLIENT_ID}&response_type=token&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(SCOPES.join(' '))}${promptParam}`;
 
-    console.log("-----------------------------------------");
-    console.log("OAuth Redirect URI (Dynamic):", redirectUri);
-    console.log("Make sure this URI is registered in Google Cloud Console!");
-    console.log("-----------------------------------------");
-    console.log("Starting Web Auth Flow...", authUrl);
+    if (interactive) {
+        console.log("-----------------------------------------");
+        console.log("OAuth Redirect URI (Dynamic):", redirectUri);
+        console.log("Make sure this URI is registered in Google Cloud Console!");
+        console.log("-----------------------------------------");
+        console.log("Starting Web Auth Flow...", authUrl);
+    }
 
     return new Promise((resolve, reject) => {
-        chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true }, async function (responseUrl) {
+        chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: interactive }, async function (responseUrl) {
             if (chrome.runtime.lastError) {
-                console.error("Auth Flow Error:", chrome.runtime.lastError.message);
+                if (interactive) {
+                    console.error("Auth Flow Error:", chrome.runtime.lastError.message);
+                } else {
+                    console.log("Silent auth not available:", chrome.runtime.lastError.message);
+                }
                 reject(new Error(chrome.runtime.lastError.message));
                 return;
             }

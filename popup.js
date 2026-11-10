@@ -116,6 +116,84 @@ document.addEventListener('DOMContentLoaded', function () {
             progressText: (cur, total) => `${cur} / ${total} 个日历已完成`,
             errorPrefix: "发生错误: ",
             unknownError: "未知错误"
+        },
+        it: {
+            refreshTooltip: "Aggiorna eventi",
+            rangeLabel: "Intervallo di ricerca eventi passati",
+            range1: "Ultimo mese",
+            range3: "Ultimi 3 mesi",
+            range6: "Ultimi 6 mesi",
+            range12: "Ultimo anno (Predefinito)",
+            range24: "Ultimi 2 anni",
+            range36: "Ultimi 3 anni",
+            optionsLabel: "Opzioni di completamento automatico",
+            optTime: "Durata e orario",
+            optAttendees: "Invitati",
+            optLocation: "Luogo",
+            optDescription: "Descrizione",
+            statusChecking: "Verifica dello stato dei dati in corso...",
+            hintText: "💡 Le modifiche vengono sincronizzate in tempo reale quando crei eventi o aggiorni le impostazioni.",
+            statusReady: (count) => `Attualmente ${count} eventi suggeriti pronti.`,
+            statusNoData: "Nessun dato memorizzato nella cache. Avvio aggiornamento...",
+            statusFetching: "Recupero dei dati di Google Calendar in corso...",
+            statusSyncing: "Sincronizzazione dei dati del calendario...",
+            statusSuccess: (count) => `Operazione riuscita! Analizzati ${count} eventi.`,
+            statusPreparing: "Preparazione in corso...",
+            progressText: (cur, total) => `${cur} / ${total} calendari completati`,
+            errorPrefix: "Errore: ",
+            unknownError: "Errore sconosciuto"
+        },
+        de: {
+            refreshTooltip: "Termine aktualisieren",
+            rangeLabel: "Zeitraum für vergangene Termine",
+            range1: "Letzter 1 Monat",
+            range3: "Letzte 3 Monate",
+            range6: "Letzte 6 Monate",
+            range12: "Letztes 1 Jahr (Standard)",
+            range24: "Letzte 2 Jahre",
+            range36: "Letzte 3 Jahre",
+            optionsLabel: "Optionen für automatische Vervollständigung",
+            optTime: "Dauer und Uhrzeit",
+            optAttendees: "Gäste",
+            optLocation: "Ort",
+            optDescription: "Beschreibung",
+            statusChecking: "Datenstatus wird überprüft...",
+            hintText: "💡 Änderungen werden in Echtzeit synchronisiert, wenn Sie Termine erstellen oder Einstellungen anpassen.",
+            statusReady: (count) => `Aktuell ${count} Terminvorschläge bereit.`,
+            statusNoData: "Keine Daten im Cache gefunden. Aktualisierung wird gestartet...",
+            statusFetching: "Google Kalender-Daten werden abgerufen...",
+            statusSyncing: "Kalenderdaten werden synchronisiert...",
+            statusSuccess: (count) => `Erfolgreich! ${count} Termine analysiert.`,
+            statusPreparing: "Vorbereitung...",
+            progressText: (cur, total) => `${cur} / ${total} Kalender abgeschlossen`,
+            errorPrefix: "Fehler: ",
+            unknownError: "Unbekannter Fehler"
+        },
+        fr: {
+            refreshTooltip: "Actualiser les événements",
+            rangeLabel: "Période de recherche des événements passés",
+            range1: "Le dernier mois",
+            range3: "Les 3 derniers mois",
+            range6: "Les 6 derniers mois",
+            range12: "La dernière année (Par défaut)",
+            range24: "Les 2 dernières années",
+            range36: "Les 3 dernières années",
+            optionsLabel: "Options de saisie automatique",
+            optTime: "Durée et horaire",
+            optAttendees: "Invités",
+            optLocation: "Lieu",
+            optDescription: "Description",
+            statusChecking: "Vérification de l'état des données...",
+            hintText: "💡 Les modifications sont synchronisées en temps réel lorsque vous créez des événements ou modifiez les paramètres.",
+            statusReady: (count) => `Actuellement ${count} événements suggérés prêts.`,
+            statusNoData: "Aucune donnée en cache. Démarrage de l'actualisation...",
+            statusFetching: "Récupération des données Google Agenda...",
+            statusSyncing: "Synchronisation des données d'agenda...",
+            statusSuccess: (count) => `Succès ! ${count} événements analysés.`,
+            statusPreparing: "Préparation en cours...",
+            progressText: (cur, total) => `${cur} / ${total} agendas terminés`,
+            errorPrefix: "Erreur : ",
+            unknownError: "Erreur inconnue"
         }
     };
 
@@ -124,6 +202,9 @@ document.addEventListener('DOMContentLoaded', function () {
         if (lang.startsWith('ko')) return 'ko';
         if (lang.startsWith('ja')) return 'ja';
         if (lang.startsWith('zh')) return 'zh';
+        if (lang.startsWith('it')) return 'it';
+        if (lang.startsWith('de')) return 'de';
+        if (lang.startsWith('fr')) return 'fr';
         return 'en';
     }
 
