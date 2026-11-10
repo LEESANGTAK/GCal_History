@@ -1435,21 +1435,33 @@ function getVal(el) {
 function setVal(el, text) {
     if (!el) return;
 
+    // 진행 중인 한글/IME 조합을 종료하기 위해 활성 요소인 경우 먼저 blur 처리
+    if (document.activeElement === el) {
+        el.blur();
+    }
     el.focus();
 
-    if (el.tagName === 'INPUT') {
-        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+    if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+        const proto = el.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
         if (nativeInputValueSetter) {
             nativeInputValueSetter.call(el, text);
         } else {
             el.value = text;
         }
 
-        el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+        try {
+            el.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, composed: true, data: text }));
+        } catch (e) { }
+        try {
+            el.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true, data: text, inputType: 'insertText' }));
+        } catch (e) {
+            el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+        }
         el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
 
-        el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Process', bubbles: true }));
-        el.dispatchEvent(new KeyboardEvent('keyup', { key: 'Process', bubbles: true }));
+        el.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', code: 'End', keyCode: 35, which: 35, bubbles: true }));
+        el.dispatchEvent(new KeyboardEvent('keyup', { key: 'End', code: 'End', keyCode: 35, which: 35, bubbles: true }));
 
         try {
             el.selectionStart = el.value.length;
@@ -1596,10 +1608,15 @@ function showSuggestions(matches, inputElement, type) {
             e.preventDefault();
             e.stopPropagation();
 
+            closeSuggestions();
             console.log("Selected match for autocomplete:", match);
 
             if (type === 'titles') {
                 const activeDialog = getActiveDialog();
+
+                // 0. 제목 선(先) 확정 및 blur 처리 (한글 IME 조합을 즉시 종료하고 캘린더 칩 미리보기에 전체 제목이 먼저 반영되도록 함)
+                setVal(inputElement, match.title);
+                inputElement.blur();
 
                 // 1. 위치 자동완성 (설정 켜진 경우: 값이 있으면 입력, 없으면 이전 값 초기화)
                 if (userSettings.autoCompleteLocation) {
@@ -1623,12 +1640,20 @@ function showSuggestions(matches, inputElement, type) {
                     await setCalendarSelection(activeDialog, match.calendarSummary);
                 }
 
-                // 5. 제목 확정 및 포커스
+                // 5. 제목 최종 확정 후 짧은 blur -> focus 사이클로 구글 캘린더 칩 UI 동기화 보장
                 setVal(inputElement, match.title);
+                inputElement.blur();
+                await new Promise(r => setTimeout(r, 50));
                 inputElement.focus();
+                try {
+                    inputElement.selectionStart = inputElement.value.length;
+                    inputElement.selectionEnd = inputElement.value.length;
+                } catch (e) { }
 
             } else {
                 setVal(inputElement, match);
+                inputElement.blur();
+                await new Promise(r => setTimeout(r, 50));
                 inputElement.focus();
             }
 
