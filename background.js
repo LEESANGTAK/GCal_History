@@ -8,9 +8,11 @@ const SCOPES = [
 function sanitizeDescription(raw) {
     if (!raw || typeof raw !== 'string') return '';
     return raw
+        .replace(/\r\n?/g, '\n')
+        .replace(/<br\s*\/?>\s*(<\/(?:p|div|li|h[1-6]|blockquote|tr)>)/gi, '$1')
         .replace(/<br\s*[\/]?>/gi, '\n')
-        .replace(/<\/p>/gi, '\n')
-        .replace(/<\/div>/gi, '\n')
+        .replace(/<hr\s*\/?>/gi, '\n')
+        .replace(/<\/(?:p|div|h[1-6]|blockquote|tr)>/gi, '\n')
         .replace(/<li[^>]*>/gi, '• ')
         .replace(/<\/li>/gi, '\n')
         .replace(/<([^>]+)>/gi, '')

@@ -847,9 +847,58 @@ function findDescriptionButton(scope) {
     return null;
 }
 
+// 설명 비교용 문자열 정규화 (줄바꿈 및 nbsp 통일)
+function normalizeDescriptionForCompare(str) {
+    return (str || '')
+        .replace(/\r\n?/g, '\n')
+        .replace(/\u00a0/g, ' ')
+        .trim();
+}
+
+// contenteditable 요소에 줄바꿈(<br>)을 유지한 채 안전하게 텍스트 DOM 주입 (Trusted Types 안전)
+function setContentEditableTextWithBreaks(el, text) {
+    const normalized = (text || '').replace(/\r\n?/g, '\n');
+    const lines = normalized.split('\n');
+    const frag = document.createDocumentFragment();
+
+    lines.forEach((line, idx) => {
+        if (idx > 0) {
+            frag.appendChild(document.createElement('br'));
+        }
+        if (line.length > 0) {
+            frag.appendChild(document.createTextNode(line));
+        }
+    });
+
+    if (lines.length > 1 && lines[lines.length - 1] === '') {
+        frag.appendChild(document.createElement('br'));
+    }
+
+    el.replaceChildren(frag);
+}
+
+// execCommand로 줄바꿈을 포함해 한 줄씩 삽입
+function insertLinesViaExecCommand(text) {
+    const normalized = (text || '').replace(/\r\n?/g, '\n');
+    const lines = normalized.split('\n');
+
+    for (let i = 0; i < lines.length; i++) {
+        if (i > 0) {
+            const brOk = document.execCommand('insertLineBreak', false, null)
+                || document.execCommand('insertParagraph', false, null);
+            if (!brOk) return false;
+        }
+        if (lines[i].length > 0) {
+            const textOk = document.execCommand('insertText', false, lines[i]);
+            if (!textOk) return false;
+        }
+    }
+    return true;
+}
+
 // 설명(Description) 자동완성 (빈 값 전달 시 기존 입력 내용 초기화)
-async function applyDescription(scope, descText) {
-    let editField = findDescriptionEditable(scope);
+async function applyDescription(scope, descText, targetField = null) {
+    let editField = targetField || findDescriptionEditable(scope);
 
     // 1. 설명이 없는 일정이면 기존 에디터 내용 비우기
     if (!descText || !descText.trim()) {
@@ -875,8 +924,11 @@ async function applyDescription(scope, descText) {
                         document.execCommand('selectAll', false, null);
                         document.execCommand('delete', false, null);
                     } catch (e) { }
-                    editField.innerHTML = '';
-                    editField.textContent = '';
+                    try {
+                        editField.replaceChildren();
+                    } catch (e) {
+                        editField.textContent = '';
+                    }
                     editField.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
                     editField.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
                     editField.blur();
@@ -889,16 +941,18 @@ async function applyDescription(scope, descText) {
         return;
     }
 
+    const normalizedDesc = descText.replace(/\r\n?/g, '\n');
+
     // 2. 이미 동일한 내용이 들어있다면 중복 입력 스킵
     if (editField) {
         const currentVal = (editField.tagName === 'TEXTAREA' || editField.tagName === 'INPUT') ? editField.value : editField.innerText;
-        if (currentVal && currentVal.trim() === descText.trim()) {
+        if (currentVal && normalizeDescriptionForCompare(currentVal) === normalizeDescriptionForCompare(normalizedDesc)) {
             console.log("Description already matches target text.");
             return;
         }
     }
 
-    console.log("Applying description text:", descText.slice(0, 50));
+    console.log("Applying description text:", normalizedDesc.slice(0, 50));
 
     if (!editField) {
         const descBtn = findDescriptionButton(scope);
@@ -925,7 +979,7 @@ async function applyDescription(scope, descText) {
 
         // 1. textarea인 경우
         if (editField.tagName === 'TEXTAREA' || editField.tagName === 'INPUT') {
-            setVal(editField, descText);
+            setVal(editField, normalizedDesc);
             return;
         }
 
@@ -948,24 +1002,24 @@ async function applyDescription(scope, descText) {
             console.warn("Failed to set selection range:", e);
         }
 
-        // execCommand로 텍스트 삽입 (리액트가 가장 잘 인식하는 방식)
+        // execCommand로 줄바꿈을 포함하여 텍스트 삽입 (에디터가 가장 잘 인식하는 방식)
         let inserted = false;
         try {
-            inserted = document.execCommand('insertText', false, descText);
+            inserted = insertLinesViaExecCommand(normalizedDesc);
         } catch (e) {
             console.warn("execCommand error:", e);
         }
 
-        // execCommand 실패 시 DOM 직접 주입 및 InputEvent 디스패치
-        if (!inserted || (editField.innerText || '').trim() !== descText.trim()) {
-            console.log("Using fallback DOM insertion for description");
-            editField.textContent = descText;
+        // execCommand 실패 또는 줄바꿈 누락 시 <br> 기반 DOM 직접 주입 및 InputEvent 디스패치
+        if (!inserted || normalizeDescriptionForCompare(editField.innerText) !== normalizeDescriptionForCompare(normalizedDesc)) {
+            console.log("Using fallback DOM insertion with <br> breaks for description");
+            setContentEditableTextWithBreaks(editField, normalizedDesc);
             try {
                 editField.dispatchEvent(new InputEvent('input', {
                     bubbles: true,
                     cancelable: true,
                     inputType: 'insertText',
-                    data: descText
+                    data: normalizedDesc
                 }));
             } catch (e) { }
         }
@@ -1456,7 +1510,7 @@ function highlightItem(items, index) {
 }
 
 function getVal(el) {
-    if (el.tagName === 'INPUT') return el.value;
+    if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') return el.value;
     return el.innerText;
 }
 
@@ -1497,8 +1551,13 @@ function setVal(el, text) {
         } catch (e) { }
 
     } else {
-        el.innerText = text;
-        el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+        setContentEditableTextWithBreaks(el, text);
+        try {
+            el.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true, data: text, inputType: 'insertText' }));
+        } catch (e) {
+            el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+        }
+        el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
     }
 }
 
@@ -1684,6 +1743,9 @@ function showSuggestions(matches, inputElement, type) {
                     inputElement.selectionEnd = inputElement.value.length;
                 } catch (e) { }
 
+            } else if (type === 'descriptions') {
+                await applyDescription(getActiveDialog(), match, inputElement);
+                inputElement.focus();
             } else {
                 setVal(inputElement, match);
                 inputElement.blur();
