@@ -852,40 +852,84 @@ function normalizeDescriptionForCompare(str) {
     return (str || '')
         .replace(/\r\n?/g, '\n')
         .replace(/\u00a0/g, ' ')
+        .replace(/\n{3,}/g, '\n\n')
         .trim();
 }
 
-// contenteditable 요소에 줄바꿈(<br>)을 유지한 채 안전하게 텍스트 DOM 주입 (Trusted Types 안전)
+// contenteditable 요소에 줄바꿈이 정상 반영되었는지 확인
+function hasDescriptionApplied(el, expectedText) {
+    const actualNorm = normalizeDescriptionForCompare(el.innerText);
+    const expectedNorm = normalizeDescriptionForCompare(expectedText);
+    if (!actualNorm) return false;
+    if (expectedNorm.includes('\n') && !actualNorm.includes('\n')) return false;
+    return actualNorm === expectedNorm ||
+        actualNorm.replace(/\n+/g, '\n') === expectedNorm.replace(/\n+/g, '\n');
+}
+
+// contenteditable 요소의 기존 내용 비우기
+function clearContentEditable(el) {
+    el.focus();
+    try {
+        const sel = window.getSelection();
+        if (sel) {
+            sel.removeAllRanges();
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            range.deleteContents();
+            range.collapse(false);
+            sel.addRange(range);
+        }
+    } catch (e) { }
+    try {
+        document.execCommand('selectAll', false, null);
+        document.execCommand('delete', false, null);
+    } catch (e) { }
+    try {
+        el.replaceChildren();
+    } catch (e) {
+        el.textContent = '';
+    }
+    el.focus();
+    try {
+        const sel = window.getSelection();
+        if (sel) {
+            sel.removeAllRanges();
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            range.collapse(false);
+            sel.addRange(range);
+        }
+    } catch (e) { }
+}
+
+// contenteditable 요소에 <div> 블록 기반 줄바꿈을 유지한 채 안전하게 텍스트 DOM 주입 (Trusted Types 안전)
 function setContentEditableTextWithBreaks(el, text) {
     const normalized = (text || '').replace(/\r\n?/g, '\n');
     const lines = normalized.split('\n');
     const frag = document.createDocumentFragment();
 
-    lines.forEach((line, idx) => {
-        if (idx > 0) {
-            frag.appendChild(document.createElement('br'));
-        }
+    lines.forEach((line) => {
+        const div = document.createElement('div');
         if (line.length > 0) {
-            frag.appendChild(document.createTextNode(line));
+            div.appendChild(document.createTextNode(line));
+        } else {
+            div.appendChild(document.createElement('br'));
         }
+        frag.appendChild(div);
     });
-
-    if (lines.length > 1 && lines[lines.length - 1] === '') {
-        frag.appendChild(document.createElement('br'));
-    }
 
     el.replaceChildren(frag);
 }
 
-// execCommand로 줄바꿈을 포함해 한 줄씩 삽입
+// execCommand로 줄바꿈을 포함해 한 줄씩 삽입 (insertParagraph 우선으로 블록 줄바꿈 생성)
 function insertLinesViaExecCommand(text) {
     const normalized = (text || '').replace(/\r\n?/g, '\n');
     const lines = normalized.split('\n');
 
     for (let i = 0; i < lines.length; i++) {
         if (i > 0) {
-            const brOk = document.execCommand('insertLineBreak', false, null)
-                || document.execCommand('insertParagraph', false, null);
+            const brOk = document.execCommand('insertParagraph', false, null)
+                || document.execCommand('insertLineBreak', false, null);
             if (!brOk) return false;
         }
         if (lines[i].length > 0) {
@@ -909,26 +953,7 @@ async function applyDescription(scope, descText, targetField = null) {
                 if (editField.tagName === 'TEXTAREA' || editField.tagName === 'INPUT') {
                     setVal(editField, '');
                 } else {
-                    editField.focus();
-                    try {
-                        let sel = window.getSelection();
-                        if (sel) {
-                            sel.removeAllRanges();
-                            const range = document.createRange();
-                            range.selectNodeContents(editField);
-                            range.deleteContents();
-                            sel.addRange(range);
-                        }
-                    } catch (e) { }
-                    try {
-                        document.execCommand('selectAll', false, null);
-                        document.execCommand('delete', false, null);
-                    } catch (e) { }
-                    try {
-                        editField.replaceChildren();
-                    } catch (e) {
-                        editField.textContent = '';
-                    }
+                    clearContentEditable(editField);
                     editField.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
                     editField.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
                     editField.blur();
@@ -987,41 +1012,54 @@ async function applyDescription(scope, descText, targetField = null) {
         editField.focus();
         await new Promise(r => setTimeout(r, 60));
 
-        // editField 내부만 타겟으로 Range 설정 및 기존 내용 비우기 (전체 화면 선택 번쩍임 현상 완전 제거)
-        let sel = window.getSelection();
+        clearContentEditable(editField);
+
+        // 전략 1: ClipboardEvent('paste') 시뮬레이션 (구글 캘린더 에디터 자체 paste 핸들러 활용)
+        let applied = false;
         try {
-            if (sel) {
-                sel.removeAllRanges();
-                const range = document.createRange();
-                range.selectNodeContents(editField);
-                range.deleteContents(); // editField 내부만 깔끔하게 비움
-                range.collapse(false);  // 커서를 editField 내부 끝으로
-                sel.addRange(range);
-            }
+            const dt = new DataTransfer();
+            dt.setData('text/plain', normalizedDesc);
+            const pasteEvt = new ClipboardEvent('paste', {
+                clipboardData: dt,
+                bubbles: true,
+                cancelable: true
+            });
+            editField.dispatchEvent(pasteEvt);
+            applied = hasDescriptionApplied(editField, normalizedDesc);
         } catch (e) {
-            console.warn("Failed to set selection range:", e);
+            console.warn("Paste simulation error:", e);
         }
 
-        // execCommand로 줄바꿈을 포함하여 텍스트 삽입 (에디터가 가장 잘 인식하는 방식)
-        let inserted = false;
-        try {
-            inserted = insertLinesViaExecCommand(normalizedDesc);
-        } catch (e) {
-            console.warn("execCommand error:", e);
-        }
-
-        // execCommand 실패 또는 줄바꿈 누락 시 <br> 기반 DOM 직접 주입 및 InputEvent 디스패치
-        if (!inserted || normalizeDescriptionForCompare(editField.innerText) !== normalizeDescriptionForCompare(normalizedDesc)) {
-            console.log("Using fallback DOM insertion with <br> breaks for description");
-            setContentEditableTextWithBreaks(editField, normalizedDesc);
+        // 전략 2: execCommand('insertText')에 줄바꿈 포함 전체 문자열 한 번에 전달
+        if (!applied) {
+            clearContentEditable(editField);
             try {
-                editField.dispatchEvent(new InputEvent('input', {
-                    bubbles: true,
-                    cancelable: true,
-                    inputType: 'insertText',
-                    data: normalizedDesc
-                }));
-            } catch (e) { }
+                const ok = document.execCommand('insertText', false, normalizedDesc);
+                if (ok) {
+                    applied = hasDescriptionApplied(editField, normalizedDesc);
+                }
+            } catch (e) {
+                console.warn("execCommand single insertText error:", e);
+            }
+        }
+
+        // 전략 3: execCommand로 줄별 삽입 (insertParagraph 우선)
+        if (!applied) {
+            clearContentEditable(editField);
+            try {
+                const ok = insertLinesViaExecCommand(normalizedDesc);
+                if (ok) {
+                    applied = hasDescriptionApplied(editField, normalizedDesc);
+                }
+            } catch (e) {
+                console.warn("execCommand line-by-line error:", e);
+            }
+        }
+
+        // 전략 4 (최종 Fallback): <div> 블록 기반 DOM 직접 주입 (Trusted Types 안전)
+        if (!applied) {
+            console.log("Using fallback <div> block DOM insertion for description");
+            setContentEditableTextWithBreaks(editField, normalizedDesc);
         }
 
         // 변경 이벤트 디스패치
